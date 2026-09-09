@@ -10093,15 +10093,31 @@ async function saveLabelCustomSettings(){
 function renderLabelSelectGrid(){
   const grid = document.getElementById('labelSelectGrid');
   grid.innerHTML = items.length ? items.map(i=>`
-    <label class="label-select-item"><input type="checkbox" class="labelChk" value="${i.id}"><span>${esc(i.name)} ${i.size?`(${esc(i.size)})`:''} ${i.expiry?`[${ar(i.expiry)}]`:''} <span style="color:var(--ink-soft); font-size:11.5px;">(${esc(i.barcode||'—')})</span></span></label>
+    <label class="label-select-item">
+      <input type="checkbox" class="labelChk" value="${i.id}">
+      <span>${esc(i.name)} ${i.size?`(${esc(i.size)})`:''} ${i.expiry?`[${ar(i.expiry)}]`:''} <span style="color:var(--ink-soft); font-size:11.5px;">(${esc(i.barcode||'—')})</span></span>
+      <input type="number" class="labelQty" data-id="${i.id}" value="1" min="1" step="1" style="width:56px; padding:4px 6px; border:1px solid var(--line); border-radius:6px; background:var(--card); color:var(--ink); text-align:center; flex-shrink:0;" onclick="event.stopPropagation()" title="عدد النسخ لهذا الصنف">
+    </label>
   `).join('') : '<div class="empty-note">لا توجد أصناف بعد</div>';
 }
 function toggleSelectAllLabels(state){ document.querySelectorAll('.labelChk').forEach(c=>c.checked=state); }
 function printSelectedLabels(){
   const ids = [...document.querySelectorAll('.labelChk:checked')].map(c=>c.value);
   if(ids.length===0){ showToast('اختر صنفًا واحدًا على الأقل'); return; }
-  const sel = items.filter(i=>ids.includes(i.id));
-  buildLabelPrint(sel);
+  // Repeat each selected item in the print list according to its own
+  // quantity field, so "3" next to an item prints 3 separate labels for it
+  // — works the same whether printing to plain paper or feeding a real
+  // label-printer driver later, since it's just more labels in the same
+  // print stream, nothing printer-specific.
+  const list = [];
+  ids.forEach(id=>{
+    const item = items.find(i=>i.id===id);
+    if(!item) return;
+    const qtyInput = document.querySelector(`.labelQty[data-id="${id}"]`);
+    const qty = Math.max(1, parseInt(qtyInput && qtyInput.value, 10) || 1);
+    for(let n=0; n<qty; n++) list.push(item);
+  });
+  buildLabelPrint(list);
 }
 function printSingleLabel(id){
   const it = items.find(i=>i.id===id);
