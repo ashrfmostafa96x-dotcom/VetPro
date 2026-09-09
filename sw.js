@@ -2,8 +2,8 @@
 // It caches the app shell so the page still loads (from cache) if opened
 // without internet, though the app's actual data/sync features still need a
 // real connection as usual.
-const CACHE_NAME = 'vetpro-shell-v1';
-const SHELL_FILES = ['/index.html', '/manifest.json'];
+const CACHE_NAME = 'vetpro-shell-v2';
+const SHELL_FILES = ['./index.html', './manifest.json'];
 
 self.addEventListener('install', (event) => {
   event.waitUntil(
