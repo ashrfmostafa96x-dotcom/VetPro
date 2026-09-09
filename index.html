@@ -1553,6 +1553,37 @@ const XLSX = (function(){
               <input type="text" id="labelExtraText" placeholder="اتركه فارغًا لعدم إضافة نص" oninput="updateLabelPreview()">
             </div>
           </div>
+          <div class="sub" style="margin-top:6px;">تخصيصات شكلية إضافية (خط، حجم، إطار) — لا تؤثر إطلاقًا على تشفير الباركود نفسه ولا على قدرة الماسح على قراءته، لأنها كلها في النص والإطار حول الباركود فقط.</div>
+          <div class="field-row">
+            <div class="field">
+              <label>خط النصوص على الملصق</label>
+              <select id="labelFontFamily" onchange="updateLabelPreview()">
+                <option value="Tajawal">Tajawal</option>
+                <option value="Cairo">Cairo</option>
+                <option value="IBM Plex Sans Arabic">IBM Plex Sans Arabic</option>
+                <option value="Almarai">Almarai</option>
+                <option value="Noto Sans Arabic">Noto Sans Arabic</option>
+              </select>
+            </div>
+            <div class="field">
+              <label>حجم الخط (%)</label>
+              <input type="number" id="labelFontSizePct" value="100" min="70" max="150" step="5" oninput="updateLabelPreview()">
+            </div>
+          </div>
+          <div class="field-row">
+            <label style="display:flex; align-items:center; gap:8px; cursor:pointer; font-size:13.5px;">
+              <input type="checkbox" id="labelBoldToggle" onchange="updateLabelPreview()">
+              اسم الصنف بخط عريض (Bold)
+            </label>
+            <div class="field">
+              <label>شكل إطار الملصق</label>
+              <select id="labelBorderStyle" onchange="updateLabelPreview()">
+                <option value="dashed">متقطّع (مناسب للقص)</option>
+                <option value="solid">خط متصل</option>
+                <option value="none">بدون إطار</option>
+              </select>
+            </div>
+          </div>
           <button class="btn small" onclick="saveLabelCustomSettings()">حفظ تخصيص الملصق</button>
         </div>
         <div class="invoice-preview-col">
@@ -1565,10 +1596,16 @@ const XLSX = (function(){
 
     <div class="card">
       <h3>🏷️ طباعة ملصقات الباركود</h3>
-      <div class="sub" style="margin-bottom:14px;">اختر الأصناف المطلوب طباعة ملصقاتها ثم اطبعها على طابعة الملصقات</div>
-      <div class="toolbar">
+      <div class="sub" style="margin-bottom:14px;">اختر الأصناف المطلوب طباعة ملصقاتها، وحدّد عدد النسخ، ثم اطبعها على طابعة الملصقات</div>
+      <div class="toolbar" style="flex-wrap:wrap; align-items:center;">
         <button class="btn ghost small" onclick="toggleSelectAllLabels(true)">تحديد الكل</button>
         <button class="btn ghost small" onclick="toggleSelectAllLabels(false)">إلغاء التحديد</button>
+        <div style="display:flex; align-items:center; gap:6px;">
+          <label for="labelPrintCopies" style="font-size:13px; color:var(--ink-soft); white-space:nowrap;">عدد النسخ:</label>
+          <button type="button" class="btn ghost small" style="padding:4px 12px; min-width:auto;" onclick="stepLabelCopies(-1)">−</button>
+          <input type="number" id="labelPrintCopies" value="1" min="1" step="1" style="width:56px; text-align:center; padding:6px 4px; border:1px solid var(--line); border-radius:8px; background:var(--card); color:var(--ink);">
+          <button type="button" class="btn ghost small" style="padding:4px 12px; min-width:auto;" onclick="stepLabelCopies(1)">+</button>
+        </div>
         <button class="btn" onclick="printSelectedLabels()">طباعة المحدد 🖨️</button>
       </div>
       <div class="label-select-grid" id="labelSelectGrid"></div>
@@ -2607,7 +2644,7 @@ let items = [], openedItems = [], usageLogs = [], transactions = [], suppliers =
   customers = [], customerPayments = [], supplierPayments = [], expenses = [], registerClosings = [],
   externalServices = [], invoicePayments = [], knownBranches = [],
   branches = [], stockTransfers = [],
-  settings = {expiryWarningDays:45, invoicePrinterType:'thermal-80', barcodeLabelSize:'size-50x25', currency:'ريال سعودي', theme:'navy-gold', invoiceStoreName:'', invoiceStorePhone:'', invoiceStoreAddress:'', invoiceFooterMessage:'', invoiceShowLogo:false, invoiceLogoData:'', invoiceShowCashier:true, invoiceShowDiscountDetails:true, invoiceFontSize:100, invoiceMargin:'margin-comfortable', invoiceTemplate:'ticket', invoiceFont:'Tajawal', uiFont:'Tajawal', cloudPharmacyId:null, mobileWideMode:false, creditOverdueDays:30, lastClosedDate:null, lastClosedDateByBranch:{}, invoiceSeq:0, invoiceSeqByBranch:{}, returnSeq:0, returnSeqByBranch:{}, labelShowName:true, labelShowSize:true, labelShowPrice:true, labelShowBarcodeNumber:true, labelExtraText:'', branchName:'', branchCode:''};
+  settings = {expiryWarningDays:45, invoicePrinterType:'thermal-80', barcodeLabelSize:'size-50x25', currency:'ريال سعودي', theme:'navy-gold', invoiceStoreName:'', invoiceStorePhone:'', invoiceStoreAddress:'', invoiceFooterMessage:'', invoiceShowLogo:false, invoiceLogoData:'', invoiceShowCashier:true, invoiceShowDiscountDetails:true, invoiceFontSize:100, invoiceMargin:'margin-comfortable', invoiceTemplate:'ticket', invoiceFont:'Tajawal', uiFont:'Tajawal', cloudPharmacyId:null, mobileWideMode:false, creditOverdueDays:30, lastClosedDate:null, lastClosedDateByBranch:{}, invoiceSeq:0, invoiceSeqByBranch:{}, returnSeq:0, returnSeqByBranch:{}, labelShowName:true, labelShowSize:true, labelShowPrice:true, labelShowBarcodeNumber:true, labelExtraText:'', labelFontFamily:'Tajawal', labelFontSizePct:100, labelBold:false, labelBorderStyle:'dashed', branchName:'', branchCode:''};
 let loginLogs = [];
 let currentUser = null;
 let cart = [];
@@ -4547,7 +4584,7 @@ async function loadAllData(){
   externalServices = await getKey('vetpharm:external_services', []);
   invoicePayments = await getKey('vetpharm:invoice_payments', []);
   heldInvoices = await getKey('vetpharm:held_invoices', []);
-  settings = await getKey('vetpharm:settings', {expiryWarningDays:45, invoicePrinterType:'thermal-80', barcodeLabelSize:'size-50x25', currency:'ريال سعودي', theme:'navy-gold', fontSize:100, invoiceStoreName:'', invoiceStorePhone:'', invoiceStoreAddress:'', invoiceFooterMessage:'', invoiceShowLogo:false, invoiceLogoData:'', invoiceShowCashier:true, invoiceShowDiscountDetails:true, invoiceFontSize:100, invoiceMargin:'margin-comfortable', invoiceTemplate:'ticket', invoiceFont:'Tajawal', uiFont:'Tajawal', cloudPharmacyId:null, mobileWideMode:false, creditOverdueDays:30, lastClosedDate:null, lastClosedDateByBranch:{}, invoiceSeq:0, invoiceSeqByBranch:{}, returnSeq:0, returnSeqByBranch:{}, labelShowName:true, labelShowSize:true, labelShowPrice:true, labelShowBarcodeNumber:true, labelExtraText:'', branchName:'', branchCode:''});
+  settings = await getKey('vetpharm:settings', {expiryWarningDays:45, invoicePrinterType:'thermal-80', barcodeLabelSize:'size-50x25', currency:'ريال سعودي', theme:'navy-gold', fontSize:100, invoiceStoreName:'', invoiceStorePhone:'', invoiceStoreAddress:'', invoiceFooterMessage:'', invoiceShowLogo:false, invoiceLogoData:'', invoiceShowCashier:true, invoiceShowDiscountDetails:true, invoiceFontSize:100, invoiceMargin:'margin-comfortable', invoiceTemplate:'ticket', invoiceFont:'Tajawal', uiFont:'Tajawal', cloudPharmacyId:null, mobileWideMode:false, creditOverdueDays:30, lastClosedDate:null, lastClosedDateByBranch:{}, invoiceSeq:0, invoiceSeqByBranch:{}, returnSeq:0, returnSeqByBranch:{}, labelShowName:true, labelShowSize:true, labelShowPrice:true, labelShowBarcodeNumber:true, labelExtraText:'', labelFontFamily:'Tajawal', labelFontSizePct:100, labelBold:false, labelBorderStyle:'dashed', branchName:'', branchCode:''});
   if(!settings.lastClosedDateByBranch) settings.lastClosedDateByBranch = {};
   if(settings.invoiceSeq === undefined) settings.invoiceSeq = 0;
   if(!settings.invoiceSeqByBranch) settings.invoiceSeqByBranch = {};
@@ -10024,29 +10061,50 @@ function readLabelPreviewConfig(){
     labelShowSize: checked('labelShowSizeToggle', settings.labelShowSize !== false),
     labelShowPrice: checked('labelShowPriceToggle', settings.labelShowPrice !== false),
     labelShowBarcodeNumber: checked('labelShowBarcodeNumberToggle', settings.labelShowBarcodeNumber !== false),
-    labelExtraText: val('labelExtraText', settings.labelExtraText || '')
+    labelExtraText: val('labelExtraText', settings.labelExtraText || ''),
+    labelFontFamily: val('labelFontFamily', settings.labelFontFamily || 'Tajawal'),
+    labelFontSizePct: Math.max(70, Math.min(150, parseInt(val('labelFontSizePct', settings.labelFontSizePct || 100), 10) || 100)),
+    labelBold: checked('labelBoldToggle', !!settings.labelBold),
+    labelBorderStyle: val('labelBorderStyle', settings.labelBorderStyle || 'dashed')
   };
 }
 
 // Shared between the live preview and the real print output, exactly like
 // buildInvoiceHTML is shared for invoices -- so what the person customizes
 // is guaranteed to be exactly what comes out of the printer.
+//
+// IMPORTANT: everything customizable here (font, size, bold, border) only
+// ever touches the surrounding TEXT and the label's own border — never the
+// values passed to JsBarcode below (format/width/height/margin), which stay
+// completely fixed. That's deliberate: those are what actually determine
+// whether a scanner can read the bars, so they're never exposed to
+// customization, however this text styling changes.
 function buildLabelHTML(item, cfg){
+  const scale = (cfg.labelFontSizePct || 100) / 100;
+  const nameSize = (11 * scale).toFixed(1);
+  const priceSize = (11 * scale).toFixed(1);
+  const extraSize = (9.5 * scale).toFixed(1);
+  const fontFamily = cfg.labelFontFamily || 'Tajawal';
+  const nameWeight = cfg.labelBold ? 800 : 700;
   const parts = [];
   if(cfg.labelShowName){
     const sizeSuffix = (cfg.labelShowSize && item.size) ? ` (${esc(item.size)})` : '';
-    parts.push(`<div style="font-size:11px; font-weight:700;">${esc(item.name)}${sizeSuffix}</div>`);
+    parts.push(`<div style="font-size:${nameSize}px; font-weight:${nameWeight}; font-family:'${fontFamily}',sans-serif;">${esc(item.name)}${sizeSuffix}</div>`);
   }
   parts.push(`<svg class="lbc" data-code="${esc(item.barcode)}" data-display="${cfg.labelShowBarcodeNumber}"></svg>`);
   if(cfg.labelShowPrice){
-    parts.push(`<div style="font-size:11px; font-weight:bold;">${fmt(item.sellPrice)} ${currHTML()}</div>`);
+    parts.push(`<div style="font-size:${priceSize}px; font-weight:bold; font-family:'${fontFamily}',sans-serif;">${fmt(item.sellPrice)} ${currHTML()}</div>`);
   }
   if(cfg.labelExtraText){
-    parts.push(`<div style="font-size:9.5px; color:#555;">${esc(cfg.labelExtraText)}</div>`);
+    parts.push(`<div style="font-size:${extraSize}px; color:#555; font-family:'${fontFamily}',sans-serif;">${esc(cfg.labelExtraText)}</div>`);
   }
   return parts.join('');
 }
 
+// The ONLY function that ever touches barcode bar rendering. Its options
+// (format/width/height/margin) are fixed on purpose — see buildLabelHTML's
+// note above. displayValue just shows/hides the human-readable number
+// UNDER the bars and never affects the bars themselves either way.
 function renderLabelBarcodeSvgs(container){
   container.querySelectorAll('.lbc').forEach(svg=>{
     try{
@@ -10055,14 +10113,34 @@ function renderLabelBarcodeSvgs(container){
   });
 }
 
+function labelBorderCss(style){
+  if(style==='none') return 'none';
+  if(style==='solid') return '1px solid #999';
+  return '1px dashed #999';
+}
+
+// Fixed WIDTH always matches the physical label's real width (that's what
+// matters for cutting/feeding a roll) — but the label box's HEIGHT can grow
+// past the nominal value if more text fields are switched on. Without this,
+// a fixed height + flexbox squeezed the barcode itself down to fit whatever
+// text was enabled, which risks the one thing that must never shrink: the
+// bars a scanner actually reads. Growing the box instead keeps the barcode
+// at its real, always-scannable size no matter how much text surrounds it —
+// still perfectly fine to cut out with scissors; only relevant if using a
+// real fixed-height label roll, where packing in every optional field on a
+// 25mm-tall label was always going to need more room than that regardless.
+function labelSizeStyle(labelClass){
+  const dims = LABEL_SIZE_MM[labelClass];
+  return dims ? `width:${dims.w}mm; min-height:${dims.h}mm; box-sizing:border-box;` : 'width:180px;';
+}
+
 function updateLabelPreview(){
   const el = document.getElementById('labelPreviewSheet');
   if(!el) return;
   const cfg = readLabelPreviewConfig();
   const labelClass = document.getElementById('printerLabelSize') ? document.getElementById('printerLabelSize').value : (settings.barcodeLabelSize || 'size-50x25');
-  const dims = LABEL_SIZE_MM[labelClass];
-  const sizeStyle = dims ? `width:${dims.w}mm; height:${dims.h}mm; box-sizing:border-box;` : 'width:180px;';
-  el.innerHTML = `<div class="label-item ${labelClass}" style="border:1px dashed #999; padding:6px; text-align:center; ${sizeStyle} margin:0 auto; display:flex; flex-direction:column; justify-content:center; align-items:center; gap:2px;">
+  const sizeStyle = labelSizeStyle(labelClass);
+  el.innerHTML = `<div class="label-item ${labelClass}" style="border:${labelBorderCss(cfg.labelBorderStyle)}; padding:6px; text-align:center; ${sizeStyle} margin:0 auto; display:flex; flex-direction:column; justify-content:center; align-items:center; gap:2px;">
     ${buildLabelHTML(LABEL_PREVIEW_SAMPLE_ITEM, cfg)}
   </div>`;
   if(typeof JsBarcode !== 'undefined') renderLabelBarcodeSvgs(el);
@@ -10076,6 +10154,10 @@ function loadLabelCustomSettingsUI(){
   byId('labelShowPriceToggle').checked = settings.labelShowPrice !== false;
   byId('labelShowBarcodeNumberToggle').checked = settings.labelShowBarcodeNumber !== false;
   byId('labelExtraText').value = settings.labelExtraText || '';
+  byId('labelFontFamily').value = settings.labelFontFamily || 'Tajawal';
+  byId('labelFontSizePct').value = settings.labelFontSizePct || 100;
+  byId('labelBoldToggle').checked = !!settings.labelBold;
+  byId('labelBorderStyle').value = settings.labelBorderStyle || 'dashed';
   updateLabelPreview();
 }
 
@@ -10086,6 +10168,10 @@ async function saveLabelCustomSettings(){
   settings.labelShowPrice = cfg.labelShowPrice;
   settings.labelShowBarcodeNumber = cfg.labelShowBarcodeNumber;
   settings.labelExtraText = cfg.labelExtraText;
+  settings.labelFontFamily = cfg.labelFontFamily;
+  settings.labelFontSizePct = cfg.labelFontSizePct;
+  settings.labelBold = cfg.labelBold;
+  settings.labelBorderStyle = cfg.labelBorderStyle;
   await saveSettings();
   showToast('تم حفظ تخصيص الملصق بنجاح');
 }
@@ -10093,29 +10179,29 @@ async function saveLabelCustomSettings(){
 function renderLabelSelectGrid(){
   const grid = document.getElementById('labelSelectGrid');
   grid.innerHTML = items.length ? items.map(i=>`
-    <label class="label-select-item">
-      <input type="checkbox" class="labelChk" value="${i.id}">
-      <span>${esc(i.name)} ${i.size?`(${esc(i.size)})`:''} ${i.expiry?`[${ar(i.expiry)}]`:''} <span style="color:var(--ink-soft); font-size:11.5px;">(${esc(i.barcode||'—')})</span></span>
-      <input type="number" class="labelQty" data-id="${i.id}" value="1" min="1" step="1" style="width:56px; padding:4px 6px; border:1px solid var(--line); border-radius:6px; background:var(--card); color:var(--ink); text-align:center; flex-shrink:0;" onclick="event.stopPropagation()" title="عدد النسخ لهذا الصنف">
-    </label>
+    <label class="label-select-item"><input type="checkbox" class="labelChk" value="${i.id}"><span>${esc(i.name)} ${i.size?`(${esc(i.size)})`:''} ${i.expiry?`[${ar(i.expiry)}]`:''} <span style="color:var(--ink-soft); font-size:11.5px;">(${esc(i.barcode||'—')})</span></span></label>
   `).join('') : '<div class="empty-note">لا توجد أصناف بعد</div>';
 }
 function toggleSelectAllLabels(state){ document.querySelectorAll('.labelChk').forEach(c=>c.checked=state); }
+function stepLabelCopies(delta){
+  const input = document.getElementById('labelPrintCopies');
+  const next = Math.max(1, (parseInt(input.value,10)||1) + delta);
+  input.value = next;
+}
 function printSelectedLabels(){
   const ids = [...document.querySelectorAll('.labelChk:checked')].map(c=>c.value);
   if(ids.length===0){ showToast('اختر صنفًا واحدًا على الأقل'); return; }
-  // Repeat each selected item in the print list according to its own
-  // quantity field, so "3" next to an item prints 3 separate labels for it
-  // — works the same whether printing to plain paper or feeding a real
-  // label-printer driver later, since it's just more labels in the same
-  // print stream, nothing printer-specific.
+  const copiesInput = document.getElementById('labelPrintCopies');
+  const copies = Math.max(1, parseInt(copiesInput && copiesInput.value, 10) || 1);
+  // Same copies count applies to every selected item — e.g. 3 items × 3
+  // copies prints 9 labels total. Works identically whether printing to
+  // plain paper or a real label-printer driver later, since it's just more
+  // labels in the same print stream, nothing printer-specific.
   const list = [];
   ids.forEach(id=>{
     const item = items.find(i=>i.id===id);
     if(!item) return;
-    const qtyInput = document.querySelector(`.labelQty[data-id="${id}"]`);
-    const qty = Math.max(1, parseInt(qtyInput && qtyInput.value, 10) || 1);
-    for(let n=0; n<qty; n++) list.push(item);
+    for(let n=0; n<copies; n++) list.push(item);
   });
   buildLabelPrint(list);
 }
@@ -10144,12 +10230,16 @@ function buildLabelPrint(list){
     labelShowSize: settings.labelShowSize !== false,
     labelShowPrice: settings.labelShowPrice !== false,
     labelShowBarcodeNumber: settings.labelShowBarcodeNumber !== false,
-    labelExtraText: settings.labelExtraText || ''
+    labelExtraText: settings.labelExtraText || '',
+    labelFontFamily: settings.labelFontFamily || 'Tajawal',
+    labelFontSizePct: settings.labelFontSizePct || 100,
+    labelBold: !!settings.labelBold,
+    labelBorderStyle: settings.labelBorderStyle || 'dashed'
   };
   const area = document.getElementById('printArea');
-  const sizeStyle = dims ? `width:${dims.w}mm; height:${dims.h}mm; box-sizing:border-box;` : 'width:180px;';
-  area.innerHTML = `<div class="label-sheet" style="display:flex; flex-wrap:wrap; gap:8px;">${list.map(i=>`
-    <div class="label-item ${labelClass}" style="border:1px dashed #999; padding:6px; text-align:center; ${sizeStyle}">
+  const sizeStyle = labelSizeStyle(labelClass);
+  area.innerHTML = `<div class="label-sheet" style="display:flex; flex-wrap:wrap; gap:8px; align-items:flex-start;">${list.map(i=>`
+    <div class="label-item ${labelClass}" style="border:${labelBorderCss(cfg.labelBorderStyle)}; padding:6px; text-align:center; ${sizeStyle} display:flex; flex-direction:column; justify-content:center; align-items:center; gap:2px;">
       ${buildLabelHTML(i, cfg)}
     </div>`).join('')}</div>`;
   renderLabelBarcodeSvgs(area);
