@@ -962,6 +962,16 @@ const XLSX = (function(){
        min-width:0 so the fields can shrink properly regardless. */
     #paymentMethodsGrid{ grid-template-columns:1fr; }
     #paymentMethodsGrid > .field{ min-width:0; }
+    /* BUG FIX: same CSS Grid min-width:auto trap as #paymentMethodsGrid
+       above, but for the many .card > .grid2 sections across the app
+       (e.g. "بونص الدكتور"). A wide table inside a card was forcing the
+       card itself to grow past the screen width instead of staying put
+       and letting its OWN overflow-x:auto (below) handle the scrolling —
+       so the table never had anywhere to scroll within, and the page
+       either clipped it or shifted as a whole instead of scrolling the
+       table in place. min-width:0 lets the card shrink to the actual
+       track width so the inner table scrolls as intended. */
+    .grid2 > *{ min-width:0; }
     /* BUG FIX: this row's three buttons (clear cart / hold invoice / the
        main checkout CTA) sized at their natural content width overflow a
        phone screen badly — the main "إتمام عملية البيع" button, the most
@@ -1076,6 +1086,7 @@ const XLSX = (function(){
     <button data-view="customers" data-roles="manager,branch_manager,cashier">العملاء (الآجل)</button>
     <button data-view="services" data-roles="manager,branch_manager,cashier">عمل خارجي وكشوفات</button>
     <button data-view="expenses" data-roles="manager,branch_manager">المصروفات</button>
+    <button data-view="doctor-commissions" data-roles="manager,branch_manager">🎁 البونص والعمولات</button>
     <button data-view="reports" data-roles="manager,branch_manager">تقرير الأرباح والاستهلاك</button>
     <button data-view="closing" data-roles="manager,branch_manager,cashier">إغلاق اليوم 🧾</button>
     <button data-view="transfers" data-roles="manager,branch_manager">تحويل بين الفروع 🔀 <span class="badge" id="transfersBadge" style="display:none;">0</span></button>
@@ -1100,7 +1111,7 @@ const XLSX = (function(){
     <div class="sub" id="todayDate"></div>
     <div class="hero" id="profitHero">
       <div class="hero-figure">
-        <div class="hero-label">مجمل ربح اليوم (عام + استهلاك، قبل المصروفات)</div>
+        <div class="hero-label">مجمل ربح مبيعات اليوم (قبل المصروفات)</div>
         <div class="hero-value num"><span id="todayProfit">0</span> <span class="currSym"><i class="sr" style="font-style:normal;"></i></span></div>
         <div class="hero-label" style="margin-top:10px; opacity:.85;" id="netProfitLabel">صافي الربح الحقيقي بعد خصم مصروفات اليوم</div>
         <div class="hero-value num" style="font-size:22px;"><span id="todayNetProfit">0</span> <span class="currSym"><i class="sr" style="font-style:normal;"></i></span></div>
@@ -1291,7 +1302,7 @@ const XLSX = (function(){
         <div class="dash-label">إجمالي مبيعات اليوم</div>
         <div class="dash-value"><span id="dashTodaySales">0</span> <span class="currSym"><i class="sr" style="font-style:normal;"></i></span></div>
       </div>
-      <div class="dash-item">
+      <div class="dash-item" id="dashProfitItem">
         <div class="dash-label">إجمالي الربح اليومي</div>
         <div class="dash-value"><span id="dashTodayProfit">0</span> <span class="currSym"><i class="sr" style="font-style:normal;"></i></span></div>
       </div>
@@ -1318,8 +1329,8 @@ const XLSX = (function(){
       <div class="sub" style="margin-bottom:10px;">تصدير الفواتير المعروضة حاليًا (حسب التصفية أعلاه)</div>
       <div class="export-mode-toggle" id="pastInvoicesExportModeToggle">
         <button type="button" class="active" data-mode="detailed" onclick="setPastInvoicesExportMode('detailed', this)">تفصيلي (كل صنف في كل فاتورة)</button>
-        <button type="button" data-mode="summary" onclick="setPastInvoicesExportMode('summary', this)">ملخص (إجمالي المبيعات والربح لكل فاتورة)</button>
-        <button type="button" data-mode="total" onclick="setPastInvoicesExportMode('total', this)">الإجمالي الكلي (كل الفواتير مجمعة)</button>
+        <button type="button" id="pastInvExportSummaryBtn" data-mode="summary" onclick="setPastInvoicesExportMode('summary', this)">ملخص (إجمالي المبيعات والربح لكل فاتورة)</button>
+        <button type="button" id="pastInvExportTotalBtn" data-mode="total" onclick="setPastInvoicesExportMode('total', this)">الإجمالي الكلي (كل الفواتير مجمعة)</button>
       </div>
       <div class="report-export-actions">
         <button class="btn excel-btn report-export-btn" onclick="exportPastInvoicesExcel()">📊 تصدير كملف Excel</button>
@@ -1329,7 +1340,7 @@ const XLSX = (function(){
 
     <table>
       <thead>
-        <tr><th>رقم الفاتورة</th><th>التاريخ والوقت</th><th>البائع</th><th>عدد الأصناف</th><th>الإجمالي</th><th>هامش الربح</th><th>خيارات</th></tr>
+        <tr><th>رقم الفاتورة</th><th>التاريخ والوقت</th><th>البائع</th><th>عدد الأصناف</th><th>الإجمالي</th><th id="pastInvMarginHeader">هامش الربح</th><th>خيارات</th></tr>
       </thead>
       <tbody id="pastInvoicesTable"></tbody>
     </table>
@@ -1724,8 +1735,76 @@ const XLSX = (function(){
     <h1>عمل خارجي وكشوفات</h1>
     <div class="sub">كشوفات، عمليات، تطعيمات، وزيارات خارجية — يمكن تحصيلها نقدًا أو تسجيلها على حساب عميل آجل، وتعديل قيمتها لاحقًا</div>
     <div class="toolbar"><button class="btn" onclick="openServiceModal()">+ تسجيل عمل جديد</button></div>
-    <table><thead><tr><th>التاريخ</th><th>العميل</th><th>النوع</th><th>الوصف</th><th>المبلغ</th><th>إجمالي التكلفة</th><th>الصافي</th><th>طريقة الدفع</th><th>بواسطة</th><th></th></tr></thead>
+    <table><thead><tr><th>التاريخ</th><th>العميل</th><th>الدكتور</th><th>النوع</th><th>الوصف</th><th>المبلغ</th><th id="serviceCostHeader">إجمالي التكلفة</th><th id="serviceNetHeader">الصافي</th><th id="serviceBonusRateHeader">نسبة البونص</th><th id="serviceBonusHeader">بونص الدكتور</th><th>طريقة الدفع</th><th>بواسطة</th><th></th></tr></thead>
     <tbody id="servicesTable"></tbody></table>
+  </section>
+
+  <!-- DOCTOR BONUSES & COMMISSIONS -->
+  <section class="view" id="view-doctor-commissions">
+    <h1>🎁 بونص الدكتور</h1>
+    <div class="sub">المبيعات والعمل الخارجي/الكشوفات منفصلان تمامًا. كل نوع له نسبة وحساب وصرف مستقل.</div>
+    <div class="toolbar" style="align-items:flex-end; gap:14px;">
+      <div class="field" style="margin-bottom:0;">
+        <label style="font-size:12px;">عرض شهر</label>
+        <input type="month" id="doctorCommissionMonthPicker" onchange="renderDoctorBonusCommissionPanel(this.value)">
+      </div>
+    </div>
+
+    <div class="grid2" style="margin-top:14px;">
+      <div class="card">
+        <h3>🛒 بونص المبيعات</h3>
+        <div class="field-row" style="margin-top:10px;">
+          <div class="field">
+            <label>نسبة بونص المبيعات (%)</label>
+            <input type="number" id="doctorSalesCommissionPctSetting" min="0" max="100" step="0.01" value="1">
+            <div class="empty-note">الافتراضي 1%. تُحسب على المبيعات حسب التحصيل.</div>
+          </div>
+          <div class="field">
+            <label>🎯 تارجت المبيعات</label>
+            <input type="number" id="doctorSalesCommissionTarget" min="0" step="0.01" value="0">
+            <div class="empty-note">التارجت للمبيعات فقط، ولا علاقة له بالعمل الخارجي.</div>
+          </div>
+        </div>
+        <div class="row-actions" style="margin-top:8px;">
+          <button class="btn small" id="saveDoctorRatesBtn" onclick="saveDoctorCommissionRates()">💾 حفظ نسبة المبيعات</button>
+          <button class="btn small" id="saveDoctorTargetBtn" onclick="saveDoctorSalesTarget()">💾 حفظ تارجت المبيعات</button>
+        </div>
+        <div class="grid2" style="margin-top:12px;">
+          <div class="card"><div class="sub">المبيعات المحصلة</div><div class="num" id="doctorTargetSalesCollected" style="font-size:20px;font-weight:800;">0</div></div>
+          <div class="card"><div class="sub">تحقيق التارجت</div><div class="num" id="doctorTargetAchievement" style="font-size:20px;font-weight:800;">—</div></div>
+          <div class="card"><div class="sub">بونص المبيعات المحسوب</div><div class="num" id="doctorSalesCommissionCalculated" style="font-size:20px;font-weight:800;">0</div></div>
+          <div class="card"><div class="sub">بونص المبيعات المصروف</div><div class="num" id="doctorSalesCommissionPaid" style="font-size:20px;font-weight:800;">0</div></div>
+          <div class="card"><div class="sub">المتاح لصرف بونص المبيعات</div><div class="num" id="doctorSalesCommissionPayable" style="font-size:20px;font-weight:800;">0</div></div>
+        </div>
+        <div id="doctorSalesCommissionPayoutStatus" class="empty-note" style="margin-top:12px;font-weight:800;"></div>
+        <div class="row-actions" id="doctorSalesCommissionPayoutActions" style="margin-top:10px;"></div>
+      </div>
+
+      <div class="card">
+        <h3>🩺 بونص العمل الخارجي والكشوفات</h3>
+        <div class="sub">حساب مستقل لكل دكتور. لا يوجد تارجت. لكل دكتور نسبته الخاصة من 0% إلى 50%، وتظهر العمليات والبونص تلقائيًا باسمه.</div>
+        <div class="grid2" style="margin-top:12px;">
+          <div class="card"><div class="sub">إجمالي صافي العمل الخارجي</div><div class="num" id="doctorExternalNetCollected" style="font-size:20px;font-weight:800;">0</div></div>
+          <div class="card"><div class="sub">إجمالي بونص العمل الخارجي</div><div class="num" id="doctorExternalCommissionCalculated" style="font-size:20px;font-weight:800;">0</div></div>
+        </div>
+        <div id="doctorExternalDoctorsTable" style="margin-top:14px; overflow:auto;"></div>
+        <div class="card" style="margin-top:14px;" id="doctorExternalDoctorManagerCard">
+          <h4>⚙️ إدارة أسماء ونِسَب الأطباء</h4>
+          <div class="sub">يمكن للمدير تعديل اسم الدكتور ونسبته الافتراضية للأعمال الجديدة. إعادة تسمية الدكتور تحدّث اسم العمليات السابقة فقط، ولا تغيّر النسبة المحفوظة مع العمليات القديمة.</div>
+          <div id="doctorExternalDoctorManager"></div>
+        </div>
+        <div id="doctorExternalCommissionPayoutStatus" class="empty-note" style="margin-top:12px;font-weight:800;"></div>
+      </div>
+    </div>
+
+    <div class="card" style="margin-top:18px;">
+      <h3>📌 ملخص البونص</h3>
+      <div class="grid2">
+        <div class="card"><div class="sub">إجمالي البونص المحسوب</div><div class="num" id="doctorTotalCommissionCalculated" style="font-size:20px;font-weight:800;">0</div></div>
+        <div class="card"><div class="sub">إجمالي البونص المصروف</div><div class="num" id="doctorTotalCommissionPaid" style="font-size:20px;font-weight:800;">0</div></div>
+        <div class="card"><div class="sub">إجمالي المتاح للصرف</div><div class="num" id="doctorTotalCommissionPayable" style="font-size:20px;font-weight:800;">0</div></div>
+      </div>
+    </div>
   </section>
 
   <!-- OPERATING EXPENSES -->
@@ -1842,15 +1921,22 @@ const XLSX = (function(){
         <button class="btn" style="font-size:15px; padding:12px 26px;" onclick="renderReport()">تطبيق</button>
       </div>
     </div>
-    <div class="grid2" style="grid-template-columns: repeat(4, 1fr); margin-bottom: 22px;">
+    <div class="grid2" style="grid-template-columns: repeat(3, 1fr); margin-bottom: 22px;">
       <div class="card"><div class="sub" style="margin:0;">إجمالي المبيعات العادية</div><div class="num" id="repRevenue" style="font-size:20px; font-weight:800;">0</div></div>
       <div class="card"><div class="sub" style="margin:0;">إجمالي الاستهلاك الخاص</div><div class="num" id="repUsageTotal" style="font-size:20px; font-weight:800;">0</div></div>
-      <div class="card" style="background:var(--sage); color:var(--teal-900);"><div class="sub" style="margin:0; color:var(--teal-900); opacity:.75;">صافي الربح الإجمالي</div><div class="num" id="repProfit" style="font-size:20px; font-weight:800;">0</div></div>
+      <div class="card"><div class="sub" style="margin:0;">إجمالي العمل الخارجي والكشوفات</div><div class="num" id="repExternalTotal" style="font-size:20px; font-weight:800;">0</div></div>
+      <div class="card"><div class="sub" style="margin:0; color:var(--brick);">تكلفة العمل الخارجي والكشوفات</div><div class="num" id="repExternalCost" style="font-size:20px; font-weight:800; color:var(--brick);">0</div></div>
+      <div class="card" style="background:var(--sage); color:var(--teal-900);"><div class="sub" style="margin:0; color:var(--teal-900); opacity:.75;">صافي الربح الإجمالي بعد تكلفة العمل الخارجي</div><div class="num" id="repProfit" style="font-size:20px; font-weight:800;">0</div></div>
       <div class="card"><div class="sub" style="margin:0;">هامش الربح العام</div><div class="num" id="repMargin" style="font-size:20px; font-weight:800;">0%</div></div>
     </div>
     <div class="grid2" style="grid-template-columns: repeat(2, 1fr); margin-bottom: 22px;" id="repExpenseCards">
       <div class="card"><div class="sub" style="margin:0;">المصروفات التشغيلية خلال الفترة</div><div class="num" id="repExpenses" style="font-size:20px; font-weight:800; color:var(--brick);">0</div></div>
       <div class="card" style="background:var(--teal-800); color:#fff;"><div class="sub" style="margin:0; color:#fff; opacity:.85;">صافي الربح الحقيقي (بعد المصروفات)</div><div class="num" id="repNetProfit" style="font-size:20px; font-weight:800;">0</div></div>
+    </div>
+    <div class="grid2" style="grid-template-columns: repeat(3, 1fr); margin-bottom: 22px;" id="repDoctorCards">
+      <div class="card"><div class="sub" style="margin:0;">عمولة الطبيب — المبيعات غير الآجلة</div><div class="num" id="repDoctorCashSales" style="font-size:20px; font-weight:800;">0</div></div>
+      <div class="card"><div class="sub" style="margin:0;">عمولة الطبيب — تحصيل آجل المبيعات</div><div class="num" id="repDoctorCreditSales" style="font-size:20px; font-weight:800;">0</div></div>
+      <div class="card"><div class="sub" style="margin:0;">عمولة الطبيب — العمل الخارجي والكشوفات</div><div class="num" id="repDoctorExternal" style="font-size:20px; font-weight:800;">0</div></div>
     </div>
     <div class="toolbar">
       <div class="report-export-actions">
@@ -1911,6 +1997,10 @@ const XLSX = (function(){
           <label>مهلة اعتبار عميل الآجل "متأخرًا" (بالأيام)</label>
           <input type="number" id="creditOverdueDaysSetting" min="1" onchange="saveCreditOverdueDaysSetting()">
         </div>
+      </div>
+      <div class="card" style="margin-top:12px; background:var(--paper);">
+        <div style="font-weight:800;">🎁 العمولات والبونص</div>
+        <div class="empty-note" style="margin-top:6px;">تم عزل جميع إعدادات العمولات في صفحة «البونص والعمولات». نسبة المبيعات الافتراضية 1%، ونسبة العمل الخارجي من 0% إلى 50% وتُحسب تلقائيًا هناك.</div>
       </div>
       <div class="field-row">
         <div class="field">
@@ -2514,6 +2604,8 @@ const XLSX = (function(){
         <option value="أخرى">أخرى</option>
       </select>
     </div>
+    <div class="field"><label>اسم الدكتور القائم بالعمل / الكشف <span style="color:#c00">*</span></label><select id="serviceDoctorSelect" onchange="onServiceDoctorSelectChange()"></select><input id="serviceDoctorName" type="hidden"><div id="serviceNewDoctorField" style="display:none;margin-top:8px;"><input id="serviceNewDoctorName" placeholder="اكتب اسم الدكتور الجديد" oninput="applyDoctorDefaultRate()"><div class="empty-note">بعد حفظه سيظهر الاسم تلقائيًا ضمن قائمة الأطباء في المرات القادمة.</div></div></div>
+    <div class="field"><label>نسبة بونص هذا الدكتور (%)</label><input type="number" id="serviceDoctorCommissionPct" min="0" max="50" step="0.01" value="0"><div class="empty-note">من 0% إلى 50%، وتُحفظ النسبة مع العملية حتى لا تتغير العمليات القديمة عند تعديل نسبة الدكتور لاحقًا.</div></div>
     <div class="field"><label>الوصف (اختياري)</label><input id="serviceDescription" placeholder="مثال: كشف على أبقار مزرعة النور"></div>
     <div class="field"><label>إجمالي مبلغ الكشف/العمل</label><input type="number" id="serviceAmount" min="0.01" step="0.01" oninput="updateServiceNetPreview()"></div>
     <div class="field"><label>تكلفة الصيدلية (أدوية/مستلزمات من مخزون الصيدلية)</label><input type="number" id="servicePharmacyCost" min="0" step="0.01" value="0" oninput="updateServiceNetPreview()"></div>
@@ -2536,6 +2628,21 @@ const XLSX = (function(){
     <div class="modal-actions">
       <button class="btn ghost" onclick="closeServiceModal()">إلغاء</button>
       <button class="btn" onclick="saveService()">حفظ</button>
+    </div>
+  </div>
+</div>
+
+<!-- Custom confirm dialog — replaces the native browser confirm() everywhere
+     in the app. The native confirm() silently does nothing (no dialog, no
+     error visible to the user) inside some embedded WebViews/PWA contexts,
+     which made buttons like "صرف بونص" appear to do nothing at all. This
+     modal uses the app's own overlay/modal styling so it always works. -->
+<div class="overlay" id="customConfirmOverlay">
+  <div class="modal" style="max-width:420px; text-align:center;">
+    <div id="customConfirmMessage" style="font-size:15px; line-height:1.7; white-space:pre-line; margin-bottom:20px;"></div>
+    <div class="row-actions" style="justify-content:center; gap:10px;">
+      <button class="btn ghost" onclick="_resolveCustomConfirm(false)">إلغاء</button>
+      <button class="btn" onclick="_resolveCustomConfirm(true)">تأكيد</button>
     </div>
   </div>
 </div>
@@ -2644,9 +2751,32 @@ let items = [], openedItems = [], usageLogs = [], transactions = [], suppliers =
   customers = [], customerPayments = [], supplierPayments = [], expenses = [], registerClosings = [],
   externalServices = [], invoicePayments = [], knownBranches = [],
   branches = [], stockTransfers = [],
-  settings = {expiryWarningDays:45, invoicePrinterType:'thermal-80', barcodeLabelSize:'size-50x25', currency:'ريال سعودي', theme:'navy-gold', invoiceStoreName:'', invoiceStorePhone:'', invoiceStoreAddress:'', invoiceFooterMessage:'', invoiceShowLogo:false, invoiceLogoData:'', invoiceShowCashier:true, invoiceShowDiscountDetails:true, invoiceFontSize:100, invoiceMargin:'margin-comfortable', invoiceTemplate:'ticket', invoiceFont:'Tajawal', uiFont:'Tajawal', cloudPharmacyId:null, mobileWideMode:false, creditOverdueDays:30, lastClosedDate:null, lastClosedDateByBranch:{}, invoiceSeq:0, invoiceSeqByBranch:{}, returnSeq:0, returnSeqByBranch:{}, labelShowName:true, labelShowSize:true, labelShowPrice:true, labelShowBarcodeNumber:true, labelExtraText:'', labelFontFamily:'Tajawal', labelFontSizePct:100, labelBold:false, labelBorderStyle:'dashed', branchName:'', branchCode:''};
+  settings = {expiryWarningDays:45, invoicePrinterType:'thermal-80', barcodeLabelSize:'size-50x25', currency:'ريال سعودي', theme:'navy-gold', invoiceStoreName:'', invoiceStorePhone:'', invoiceStoreAddress:'', invoiceFooterMessage:'', invoiceShowLogo:false, invoiceLogoData:'', invoiceShowCashier:true, invoiceShowDiscountDetails:true, invoiceFontSize:100, invoiceMargin:'margin-comfortable', invoiceTemplate:'ticket', invoiceFont:'Tajawal', uiFont:'Tajawal', cloudPharmacyId:null, mobileWideMode:false, creditOverdueDays:30, lastClosedDate:null, lastClosedDateByBranch:{}, invoiceSeq:0, invoiceSeqByBranch:{}, returnSeq:0, returnSeqByBranch:{}, labelShowName:true, labelShowSize:true, labelShowPrice:true, labelShowBarcodeNumber:true, labelExtraText:'', labelFontFamily:'Tajawal', labelFontSizePct:100, labelBold:false, labelBorderStyle:'dashed', branchName:'', branchCode:'', doctorSalesCommissionPct:1, doctorExternalCommissionPct:0, doctorExternalRates:{}};
 let loginLogs = [];
 let currentUser = null;
+
+// Custom replacement for window.confirm() — see the customConfirmOverlay
+// markup for why: native confirm() doesn't reliably show anything inside
+// some embedded WebViews/PWA contexts, so a button gated on it can look
+// like it does nothing at all with no error. This always renders using
+// the app's own overlay/modal, so it works the same everywhere.
+let _customConfirmResolve = null;
+function showConfirm(message){
+  return new Promise(resolve=>{
+    _customConfirmResolve = resolve;
+    const msgEl = document.getElementById('customConfirmMessage');
+    if(msgEl) msgEl.textContent = message;
+    const overlay = document.getElementById('customConfirmOverlay');
+    if(overlay) overlay.classList.add('active');
+  });
+}
+function _resolveCustomConfirm(result){
+  const overlay = document.getElementById('customConfirmOverlay');
+  if(overlay) overlay.classList.remove('active');
+  const resolve = _customConfirmResolve;
+  _customConfirmResolve = null;
+  if(resolve) resolve(result);
+}
 let cart = [];
 let heldInvoices = [];
 let html5QrInstance = null;
@@ -2796,7 +2926,7 @@ const saveInvoicePayments = async ()=>{ await setKey('vetpharm:invoice_payments'
 const saveUsers = async ()=>{ await setKey('vetpharm:users', users); if(window.CloudSync) CloudSync.pushCollection('users'); };
 const saveBranches = async ()=>{ await setKey('vetpharm:branches', branches); if(window.CloudSync) CloudSync.pushCollection('branches'); };
 const saveStockTransfers = async ()=>{ await setKey('vetpharm:stock_transfers', stockTransfers); if(window.CloudSync) CloudSync.pushCollection('stockTransfers'); };
-const saveSettings = async ()=>{ await setKey('vetpharm:settings', settings); if(window.CloudSync) CloudSync.pushCollection('settings'); };
+const saveSettings = async ()=>{ await setKey('vetpharm:settings', settings); if(window.CloudSync && currentUser && currentUser.role==='manager') CloudSync.pushCollection('settings'); };
 const saveHeldInvoices = ()=>setKey('vetpharm:held_invoices', heldInvoices);
 const saveLoginLogs = ()=>setKey('vetpharm:login_logs', loginLogs);
 
@@ -2890,6 +3020,18 @@ const CloudSync = (function(){
   // existing save function, so this module never keeps its own separate
   // copy of the data — it just reads/writes the same arrays every other
   // part of the app already uses.
+  // SECURITY: whole-document cloud mirrors are not safe write targets for cashiers.
+  // A malicious client can call Firestore directly, so the Rules are authoritative;
+  // this client-side gate keeps the normal UI from repeatedly attempting forbidden writes.
+  function canWriteCloudCollection(name){
+    const role = currentUser && currentUser.role;
+    if(!role) return false;
+    if(name === 'transactions') return role === 'manager' || role === 'branch_manager' || role === 'cashier';
+    // Whole-document mirrors are manager-owned. A branch user must never be able
+    // to replace an entire inventory/settings/payments document from the client.
+    return role === 'manager';
+  }
+
   function localAccessorFor(name){
     switch(name){
       case 'items': return {
@@ -2984,7 +3126,7 @@ const CloudSync = (function(){
 
   async function pushCollection(name){
     const acc = localAccessorFor(name);
-    if(!acc) return;
+    if(!acc || !canWriteCloudCollection(name)) return;
     // Record the local change first, no matter what the connection is doing.
     // If the push below fails (offline), this flag is what protects the work.
     await markDirty(name);
@@ -3047,6 +3189,9 @@ const CloudSync = (function(){
   // the live listener would immediately re-add it from the remote copy and
   // the deletion would appear to "undo itself".
   async function deleteRecords(name, ids){
+    // SECURITY: invoice/transaction deletion is a destructive accounting operation.
+    // Only manager accounts are allowed to propagate a real Firestore delete.
+    if(name === 'transactions' && !(currentUser && currentUser.role === 'manager')) return;
     const seen = syncedRecordIds[name] || (syncedRecordIds[name] = {});
     (ids||[]).forEach(id=>{ delete seen[id]; });
     await saveSyncedRecordIds();
@@ -3461,7 +3606,8 @@ const CloudSync = (function(){
         .collection('loginEvents').add({
           username: user.username || '',
           role: user.role || '',
-          at: new Date().toISOString(),
+          at: firebase.firestore.FieldValue.serverTimestamp(),
+          clientAt: new Date().toISOString(),
           deviceId: getDeviceId(),
           ua: (navigator.userAgent||'').slice(0,160)
         });
@@ -3964,7 +4110,7 @@ async function submitCloudConnect(){
   const email = document.getElementById('cloudConnectEmail').value.trim();
   const pass = document.getElementById('cloudConnectPass').value;
   if(!email || !pass){ showToast('أدخل البريد وكلمة المرور'); return; }
-  if(!confirm('هيتم استبدال بيانات هذا الجهاز بالكامل ببيانات الصيدلية السحابية. متأكد؟')) return;
+  if(!(await showConfirm('هيتم استبدال بيانات هذا الجهاز بالكامل ببيانات الصيدلية السحابية. متأكد؟'))) return;
   showToast('جارٍ الاتصال...');
   const res = await CloudSync.connectExisting(email, pass);
   if(res.ok){ closeCloudConnectModal(); renderCloudSyncCard(); showToast('تم الاتصال بنجاح ومزامنة البيانات'); }
@@ -4049,8 +4195,8 @@ async function refreshRecentLogins(){
   }).join('');
 }
 
-function disconnectCloudSync(){
-  if(!confirm('هل تريد قطع الاتصال بالسحابة؟ ستستمر بياناتك المحلية كما هي، لكن لن تتم مزامنتها بعد الآن.')) return;
+async function disconnectCloudSync(){
+  if(!(await showConfirm('هل تريد قطع الاتصال بالسحابة؟ ستستمر بياناتك المحلية كما هي، لكن لن تتم مزامنتها بعد الآن.'))) return;
   CloudSync.disconnect();
 }
 
@@ -4111,7 +4257,7 @@ async function refreshCloudBackups(){
 }
 
 async function restoreCloudBackup(backupId){
-  if(!confirm('سيتم استبدال بيانات هذا الجهاز بالكامل بمحتوى النسخة السحابية. سيتم أخذ نسخة أمان من الوضع الحالي أولًا. هل تريد المتابعة؟')) return;
+  if(!(await showConfirm('سيتم استبدال بيانات هذا الجهاز بالكامل بمحتوى النسخة السحابية. سيتم أخذ نسخة أمان من الوضع الحالي أولًا. هل تريد المتابعة؟'))) return;
   showToast('جارٍ تحميل النسخة من السحابة...');
   const res = await CloudSync.downloadBackup(backupId);
   if(!res.ok){ showToast('تعذر الاسترجاع: ' + res.msg); return; }
@@ -4590,9 +4736,14 @@ async function loadAllData(){
   if(!settings.invoiceSeqByBranch) settings.invoiceSeqByBranch = {};
   if(settings.returnSeq === undefined) settings.returnSeq = 0;
   if(!settings.returnSeqByBranch) settings.returnSeqByBranch = {};
+  if(settings.doctorSalesCommissionPct === undefined || settings.doctorSalesCommissionPct === null) settings.doctorSalesCommissionPct = 1;
+  if(settings.doctorExternalCommissionPct === undefined || settings.doctorExternalCommissionPct === null) settings.doctorExternalCommissionPct = 0;
+  if(settings.doctorSalesCommissionTarget === undefined || settings.doctorSalesCommissionTarget === null) settings.doctorSalesCommissionTarget = 0;
   
   document.getElementById('expiryDaysSetting').value = settings.expiryWarningDays || 45;
   document.getElementById('creditOverdueDaysSetting').value = settings.creditOverdueDays || 30;
+  const doctorTargetRestoreEl = document.getElementById('doctorSalesCommissionTarget'); if(doctorTargetRestoreEl) doctorTargetRestoreEl.value = settings.doctorSalesCommissionTarget ?? 0;
+  const doctorTargetEl = document.getElementById('doctorSalesCommissionTarget'); if(doctorTargetEl) doctorTargetEl.value = settings.doctorSalesCommissionTarget ?? 0;
   document.getElementById('currencySymbolSelect').value = settings.currency || 'ريال سعودي';
   document.getElementById('printerInvoiceType').value = settings.invoicePrinterType || 'thermal-80';
   document.getElementById('printerLabelSize').value = settings.barcodeLabelSize || 'size-50x25';
@@ -4630,7 +4781,7 @@ function parseSizeToMl(sizeStr){
 }
 
 // Helpers
-function uid(){ return Date.now().toString(36)+Math.random().toString(36).slice(2,7); }
+function uid(){ try{ return crypto.randomUUID(); }catch(e){ return Date.now().toString(36)+'-'+Math.random().toString(36).slice(2,10)+'-'+Math.random().toString(36).slice(2,10); } }
 
 // SECURITY FIX: user passwords used to be stored and compared as plain text
 // (a raw `password` field) — readable by anyone who opens vetpharm-data.json,
@@ -4801,6 +4952,7 @@ document.querySelectorAll('.nav button').forEach(btn=>{
     // Each view refreshes its own heavy content on open. This is what makes
     // it safe for renderAll() to skip hidden views entirely (see renderAll).
     if(btn.dataset.view==='reports') renderReport();
+    if(btn.dataset.view==='doctor-commissions') renderDoctorBonusCommissionPanel();
     if(btn.dataset.view==='items') renderItemsTable();
     if(btn.dataset.view==='opened-items') renderOpenedItems();
     if(btn.dataset.view==='sales'){ renderRecentTx(); renderTodayInvoicesPanel(); renderCart(); setTimeout(()=>document.getElementById('scanInput').focus(),50); }
@@ -5662,10 +5814,10 @@ function renderHeldInvoicesTable(){
   }).join('');
 }
 
-function resumeHeldInvoice(id){
+async function resumeHeldInvoice(id){
   const held = heldInvoices.find(h=>h.id===id);
   if(!held) return;
-  if(cart.length>0 && !confirm('يوجد فاتورة حالية قيد التسجيل، هل تريد تعليقها تلقائياً قبل استئناف الفاتورة المختارة؟')){
+  if(cart.length>0 && !(await showConfirm('يوجد فاتورة حالية قيد التسجيل، هل تريد تعليقها تلقائياً قبل استئناف الفاتورة المختارة؟'))){
     return;
   }
   if(cart.length>0){ holdCurrentInvoice(); }
@@ -5679,8 +5831,8 @@ function resumeHeldInvoice(id){
   showToast('تم استئناف الفاتورة');
 }
 
-function deleteHeldInvoice(id){
-  if(!confirm('هل تريد حذف هذه الفاتورة المعلقة نهائياً؟')) return;
+async function deleteHeldInvoice(id){
+  if(!(await showConfirm('هل تريد حذف هذه الفاتورة المعلقة نهائياً؟'))) return;
   heldInvoices = heldInvoices.filter(h=>h.id!==id);
   saveHeldInvoices(); renderHeldInvoicesBar();
 }
@@ -5770,12 +5922,12 @@ function addItemToEditingHeldInvoice(){
   renderEditHeldInvoiceTable();
 }
 
-function saveHeldInvoiceEdits(){
+async function saveHeldInvoiceEdits(){
   const id = document.getElementById('editHeldInvoiceId').value;
   const held = heldInvoices.find(h=>h.id===id);
   if(!held) return;
   if(editingHeldInvoiceLines.length===0){
-    if(!confirm('لا توجد أصناف في الفاتورة — هل تريد حذفها؟')) return;
+    if(!(await showConfirm('لا توجد أصناف في الفاتورة — هل تريد حذفها؟'))) return;
     heldInvoices = heldInvoices.filter(h=>h.id!==id);
   } else {
     held.cart = editingHeldInvoiceLines;
@@ -6082,11 +6234,12 @@ function renderReturnsTable(){
 }
 
 function deleteReturnInvoice(saleId){
+  if(!currentUser || currentUser.role!=='manager'){ showToast('الحذف النهائي لفواتير الإرجاع متاح لمدير الصيدلية فقط'); return; }
   if(!hasPerm('deleteInvoice')){ showToast('ليس لديك صلاحية حذف الفواتير'); return; }
   const tx0 = transactions.find(t=>t.saleId===saleId && t.type==='return');
   if(tx0 && isDateLocked(tx0.date, tx0.branchId)){ showToast(lockedDateMessage(tx0.branchId)); return; }
   requireInvoiceDeleteAuthorization(async ()=>{
-    if(!confirm('هل تريد حذف فاتورة الإرجاع هذه؟ سيتم خصم الأصناف من المخزون مرة أخرى.')) return;
+    if(!(await showConfirm('هل تريد حذف فاتورة الإرجاع هذه؟ سيتم خصم الأصناف من المخزون مرة أخرى.'))) return;
     const tx = transactions.filter(t=>t.saleId===saleId && t.type==='return');
     tx.forEach(t=>{
       const item = items.find(i=>i.id===t.itemId);
@@ -6545,7 +6698,7 @@ async function regenerateInvoiceDeletePin(){
   // so an unauthorized regeneration here would invalidate the deletion PIN
   // on every device in the pharmacy at once. Check the role explicitly.
   if(!currentUser || currentUser.role!=='manager'){ showToast('غير مسموح لك بتغيير الرقم السري'); return; }
-  if(!confirm('توليد رقم سري جديد؟ الرقم الحالي لن يعمل بعد ذلك.')) return;
+  if(!(await showConfirm('توليد رقم سري جديد؟ الرقم الحالي لن يعمل بعد ذلك.'))) return;
   settings.invoiceDeletePin = generateInvoiceDeletePin();
   await saveSettings();
   renderInvoiceDeletePinDisplay();
@@ -6614,11 +6767,14 @@ async function performInvoiceDeletion(saleId){
 }
 
 function deleteInvoiceById(saleId){
+  // Backend policy: only the pharmacy manager may permanently delete a transaction.
+  // Branch managers can edit operationally but cannot erase the accounting record.
+  if(!currentUser || currentUser.role!=='manager'){ showToast('الحذف النهائي للفواتير متاح لمدير الصيدلية فقط'); return; }
   if(!hasPerm('deleteInvoice')){ showToast('ليس لديك صلاحية حذف الفواتير'); return; }
   const tx = transactions.filter(t=>t.saleId===saleId)[0];
   if(tx && isDateLocked(tx.date, tx.branchId)){ showToast(lockedDateMessage(tx.branchId)); return; }
-  requireInvoiceDeleteAuthorization(()=>{
-    if(!confirm('هل أنت متأكد من حذف الفاتورة بالكامل؟ سيتم استرجاع الأصناف لمخزون الصيدلية.')) return;
+  requireInvoiceDeleteAuthorization(async ()=>{
+    if(!(await showConfirm('هل أنت متأكد من حذف الفاتورة بالكامل؟ سيتم استرجاع الأصناف لمخزون الصيدلية.'))) return;
     performInvoiceDeletion(saleId);
   });
 }
@@ -6641,7 +6797,22 @@ function renderPastInvoices(){
   const todayProfit = todayTx.reduce((s,t)=>s+txProfit(t),0);
   
   document.getElementById('dashTodaySales').textContent = fmt(todayRevenue);
-  document.getElementById('dashTodayProfit').textContent = fmt(todayProfit);
+  const canSeeProfit = hasPerm('seeCosts');
+  const profitItemEl = document.getElementById('dashProfitItem');
+  if(profitItemEl) profitItemEl.style.display = canSeeProfit ? '' : 'none';
+  if(canSeeProfit) document.getElementById('dashTodayProfit').textContent = fmt(todayProfit);
+  const marginHeaderEl = document.getElementById('pastInvMarginHeader');
+  if(marginHeaderEl) marginHeaderEl.style.display = canSeeProfit ? '' : 'none';
+  const summaryBtn = document.getElementById('pastInvExportSummaryBtn');
+  const totalBtn = document.getElementById('pastInvExportTotalBtn');
+  if(summaryBtn) summaryBtn.style.display = canSeeProfit ? '' : 'none';
+  if(totalBtn) totalBtn.style.display = canSeeProfit ? '' : 'none';
+  if(!canSeeProfit && pastInvoicesExportMode !== 'detailed'){
+    pastInvoicesExportMode = 'detailed';
+    const detailedBtn = document.querySelector('#pastInvoicesExportModeToggle [data-mode="detailed"]');
+    document.querySelectorAll('#pastInvoicesExportModeToggle button').forEach(b=>b.classList.remove('active'));
+    if(detailedBtn) detailedBtn.classList.add('active');
+  }
 
   let sales = transactions.filter(t=>t.type==='sale' && belongsToCurrentBranch(t));
 
@@ -6682,6 +6853,7 @@ function renderPastInvoices(){
 
   tbody.innerHTML = shownInvoices.map(inv=>{
     const margin = inv.total - inv.cost;
+    const canSeeProfit = hasPerm('seeCosts');
     return `
     <tr>
       <td class="item-name">${inv.saleId}</td>
@@ -6689,7 +6861,7 @@ function renderPastInvoices(){
       <td>${inv.soldBy||'—'}</td>
       <td class="num">${ar(inv.items.length)}</td>
       <td class="num">${fmt(inv.total)} ${currHTML()}</td>
-      <td class="num" style="color:var(--teal-800); font-weight:bold;">${fmt(margin)} ${currHTML()}</td>
+      <td class="num" style="color:var(--teal-800); font-weight:bold; ${canSeeProfit?'':'display:none;'}">${canSeeProfit ? fmt(margin)+' '+currHTML() : ''}</td>
       <td>
         <div class="row-actions">
           <button class="icon-btn" onclick="reprintInvoice('${inv.saleId}')">طباعة</button>
@@ -6715,6 +6887,7 @@ function clearPastInvoicesFilter(){
 // summary (one row per invoice — total sales & total profit).
 let pastInvoicesExportMode = 'detailed'; // 'detailed' | 'summary'
 function setPastInvoicesExportMode(mode, btn){
+  if((mode==='summary' || mode==='total') && !hasPerm('seeCosts')){ showToast('غير مسموح لك بعرض الأرباح'); return; }
   pastInvoicesExportMode = mode;
   // BUG FIX: this used to select ALL '.export-mode-toggle button' elements
   // on the page — but the stock-alerts export toggle (a completely separate
@@ -6756,6 +6929,9 @@ function pastInvoicesRangeLabel(from, to, today){
 function exportPastInvoicesExcel(){
   const {list} = getPastInvoicesFilteredList();
   if(list.length===0){ showToast('لا توجد فواتير لتصديرها في هذه الفترة'); return; }
+  if((pastInvoicesExportMode==='summary' || pastInvoicesExportMode==='total') && !hasPerm('seeCosts')){
+    showToast('غير مسموح لك بعرض الأرباح'); return;
+  }
   if(pastInvoicesExportMode==='detailed'){
     const headers = ['رقم الفاتورة','التاريخ والوقت','البائع','الصنف','الكمية','سعر الوحدة','إجمالي السطر'];
     const rows = [];
@@ -6784,6 +6960,9 @@ function exportPastInvoicesExcel(){
 function exportPastInvoicesPDF(){
   const {list, from, to, today} = getPastInvoicesFilteredList();
   if(list.length===0){ showToast('لا توجد فواتير لتصديرها في هذه الفترة'); return; }
+  if((pastInvoicesExportMode==='summary' || pastInvoicesExportMode==='total') && !hasPerm('seeCosts')){
+    showToast('غير مسموح لك بعرض الأرباح'); return;
+  }
   const metaLine = pastInvoicesRangeLabel(from, to, today);
   const curr = settings.currency||'';
   if(pastInvoicesExportMode==='detailed'){
@@ -7172,7 +7351,7 @@ async function deleteItem(id){
   const msg = totalQty>0
     ? `تنبيه: لا يزال هذا الصنف يحتوي على ${totalQty} وحدة بالمخزون (صيدلية + مخزن). حذفه سيفقد تتبع هذه الكمية من النظام رغم بقائها فعليًا. هل تريد الحذف مع ذلك؟`
     : 'هل تريد حذف هذا الصنف؟';
-  if(!confirm(msg)) return;
+  if(!(await showConfirm(msg))) return;
   items = items.filter(i=>i.id!==id);
   // Drop the deleted item from the in-progress cart / return cart too.
   // Leaving it there produced a line that looked normal on screen but made
@@ -7271,6 +7450,7 @@ function setUIFont(val){
 async function saveGeneralSettings(){
   settings.currency = document.getElementById('currencySymbolSelect').value || 'ريال سعودي';
   settings.expiryWarningDays = parseInt(document.getElementById('expiryDaysSetting').value)||45;
+  const doctorTargetInput = document.getElementById('doctorSalesCommissionTarget'); if(doctorTargetInput) settings.doctorSalesCommissionTarget = Math.max(0, parseFloat(doctorTargetInput.value)||0);
   await saveSettings();
   updateCurrencyUI();
   renderDashboard();
@@ -7356,6 +7536,7 @@ async function saveInvoiceCustomSettings(){
 async function saveAllSettings(){
   settings.currency = document.getElementById('currencySymbolSelect').value || 'ريال سعودي';
   settings.expiryWarningDays = parseInt(document.getElementById('expiryDaysSetting').value)||45;
+  const doctorTargetInputAll = document.getElementById('doctorSalesCommissionTarget'); if(doctorTargetInputAll) settings.doctorSalesCommissionTarget = Math.max(0, parseFloat(doctorTargetInputAll.value)||0);
   settings.invoicePrinterType = document.getElementById('printerInvoiceType').value;
   settings.barcodeLabelSize = document.getElementById('printerLabelSize').value;
   settings.invoiceStoreName = document.getElementById('invoiceStoreName').value.trim();
@@ -7395,6 +7576,20 @@ function isViewVisible(name){
   const el = document.getElementById('view-'+name);
   return !!el && el.classList.contains('active');
 }
+// تحديث مستقل لصفحة البونص: يضمن إعادة الحساب تلقائيًا حتى لو تغيّرت
+// البيانات من Listener/جهاز آخر أو من عملية دفع بدون تغيير شاشة أخرى.
+let doctorBonusAutoRefreshTimer = null;
+function startDoctorBonusAutoRefresh(){
+  if(doctorBonusAutoRefreshTimer) return;
+  doctorBonusAutoRefreshTimer = setInterval(()=>{
+    if(isViewVisible('doctor-commissions')) renderDoctorBonusCommissionPanel();
+  }, 3000);
+}
+function stopDoctorBonusAutoRefresh(){
+  if(doctorBonusAutoRefreshTimer){ clearInterval(doctorBonusAutoRefreshTimer); doctorBonusAutoRefreshTimer=null; }
+}
+startDoctorBonusAutoRefresh();
+
 function renderAll(){
   // Always cheap + always needed (badges, selects, sidebar state)
   renderDashboard(); populateSelects(); renderHeldInvoicesBar(); applyRoleVisibility();
@@ -7404,6 +7599,7 @@ function renderAll(){
   if(isViewVisible('opened-items')) renderOpenedItems();
   if(isViewVisible('past-invoices')) renderPastInvoices();
   if(isViewVisible('returns')) renderReturnsTable();
+  if(isViewVisible('doctor-commissions')) renderDoctorBonusCommissionPanel();
 }
 
 // ===== Sales-velocity analytics =====
@@ -7912,6 +8108,187 @@ function expensesTotal(fromISO, toISO){
   return expensesInRange(fromISO, toISO).reduce((s,e)=>s+e.amount,0);
 }
 
+function doctorCommissionPayoutsInPeriod(from, to, type, branchId, doctorName){
+  const belongs = e => branchId ? (e.branchId||null)===branchId : belongsToCurrentBranch(e);
+  return expenses.filter(e=>e.doctorCommissionPayout===true
+    && e.doctorCommissionType===type
+    && e.commissionPeriodFrom===from
+    && e.commissionPeriodTo===to
+    && (doctorName==null || e.doctorName===doctorName)
+    && belongs(e));
+}
+
+async function saveDoctorCommissionRates(){
+  const isManager = currentUser && currentUser.role==='manager';
+  if(!isManager){ showToast('تعديل نسب العمولات متاح للمدير فقط'); return; }
+  const salesEl=document.getElementById('doctorSalesCommissionPctSetting');
+  const externalEl=document.getElementById('doctorExternalCommissionPctSetting');
+  if(!salesEl || !externalEl) return;
+  settings.doctorSalesCommissionPct = Math.min(100, Math.max(0, parseFloat(salesEl.value)||0));
+  settings.doctorExternalCommissionPct = Math.min(50, Math.max(0, parseFloat(externalEl.value)||0));
+  await saveSettings();
+  renderDoctorBonusCommissionPanel();
+  showToast('تم حفظ نسب البونص بنجاح');
+}
+
+async function saveDoctorSalesTarget(){
+  const isManager = currentUser && currentUser.role==='manager';
+  if(!isManager){ showToast('تعديل تارجت العمولة متاح للمدير فقط'); return; }
+  const el=document.getElementById('doctorSalesCommissionTarget');
+  if(!el) return;
+  const value=Math.max(0, parseFloat(el.value)||0);
+  settings.doctorSalesCommissionTarget=value;
+  await saveSettings();
+  renderDoctorBonusCommissionPanel();
+  showToast('تم حفظ تارجت المبيعات بنجاح');
+}
+
+function renderDoctorBonusCommissionPanel(selectedMonth){
+  const card=document.getElementById('view-doctor-commissions');
+  if(!card) return;
+  const picker=document.getElementById('doctorCommissionMonthPicker');
+  selectedMonth=selectedMonth || (picker&&picker.value) || todayISO().slice(0,7);
+  if(picker) picker.value=selectedMonth;
+  const isManager = currentUser && currentUser.role==='manager';
+  const from=selectedMonth+'-01', to=selectedMonth+'-31';
+  const bId=currentBranchId();
+  const d=doctorCommissionForPeriod(from,to,bId);
+  const target=Math.max(0,Number(settings.doctorSalesCommissionTarget)||0);
+  const salesBase=Number(d.salesCashCollected||0)+Number(d.salesCreditCollected||0);
+  const targetMet=target<=0 || salesBase+0.009>=target;
+  const salesPaid=doctorCommissionPayoutsInPeriod(from,to,'sales',bId).reduce((sum,e)=>sum+(Number(e.amount)||0),0);
+  const salesPayable=targetMet ? Math.max(0, Number(d.salesCommission||0)-salesPaid) : 0;
+  const salesRate=Math.min(100, Math.max(0, Number(settings.doctorSalesCommissionPct ?? 1)||0));
+  const salesRateEl=document.getElementById('doctorSalesCommissionPctSetting');
+  if(salesRateEl){ salesRateEl.value=salesRate; salesRateEl.disabled=!isManager; }
+  const targetEl=document.getElementById('doctorSalesCommissionTarget');
+  if(targetEl){ targetEl.value=target; targetEl.disabled=!isManager; }
+  ['saveDoctorRatesBtn','saveDoctorTargetBtn'].forEach(id=>{const el=document.getElementById(id);if(el)el.style.display=isManager?'':'none';});
+  const curr=currHTML();
+  const set=(id,text)=>{const el=document.getElementById(id);if(el)el.innerHTML=text;};
+  set('doctorTargetSalesCollected',fmt(salesBase)+' '+curr);
+  set('doctorTargetAchievement',target>0 ? fmt(Math.min(999.99,salesBase/target*100))+'%' : 'بدون تارجت');
+  set('doctorSalesCommissionCalculated',fmt(d.salesCommission||0)+' '+curr);
+  set('doctorSalesCommissionPaid',fmt(salesPaid)+' '+curr);
+  set('doctorSalesCommissionPayable',fmt(salesPayable)+' '+curr);
+  const externalRows=Object.values(d.externalCommissionByDoctor||{}).sort((a,b)=>a.doctorName.localeCompare(b.doctorName,'ar'));
+  const externalNet=externalRows.reduce((sum,r)=>sum+(Number(r.netCollected)||0),0);
+  const externalTotal=externalRows.reduce((sum,r)=>sum+(Number(r.commission)||0),0);
+  set('doctorExternalNetCollected',fmt(externalNet)+' '+curr);
+  set('doctorExternalCommissionCalculated',fmt(externalTotal)+' '+curr);
+  const table=document.getElementById('doctorExternalDoctorsTable');
+  if(table){
+    if(!externalRows.length){
+      table.innerHTML='<div class="empty-note">لا توجد أعمال خارجية/كشوفات مسجلة لهذا الشهر.</div>';
+    } else {
+      table.innerHTML=`<table><thead><tr><th>الدكتور</th><th>صافي العمل الخارجي</th><th>النسبة</th><th>البونص المحسوب</th><th>المصروف</th><th>المتاح للصرف</th><th></th></tr></thead><tbody>${externalRows.map(r=>{
+        const paid=doctorCommissionPayoutsInPeriod(from,to,'external',bId,r.doctorName).reduce((sum,e)=>sum+(Number(e.amount)||0),0);
+        const payable=Math.max(0,Number(r.commission||0)-paid);
+        return `<tr><td><b>${esc(r.doctorName)}</b></td><td class="num">${fmt(r.netCollected)} ${curr}</td><td class="num">${fmt(r.rate)}%</td><td class="num">${fmt(r.commission)} ${curr}</td><td class="num">${fmt(paid)} ${curr}</td><td class="num"><b>${fmt(payable)} ${curr}</b></td><td>${payable>0.009 && isManager ? `<button class="btn small" onclick="confirmDoctorCommissionPayout('external','${from}','${to}',${JSON.stringify(r.doctorName)})">صرف</button>` : '—'}</td></tr>`;
+      }).join('')}</tbody></table>`;
+    }
+  }
+  renderDoctorExternalDoctorManager();
+  set('doctorTotalCommissionCalculated',fmt((d.salesCommission||0)+externalTotal)+' '+curr);
+  const externalPaidTotal=externalRows.reduce((sum,r)=>sum+doctorCommissionPayoutsInPeriod(from,to,'external',bId,r.doctorName).reduce((x,e)=>x+(Number(e.amount)||0),0),0);
+  set('doctorTotalCommissionPaid',fmt(salesPaid+externalPaidTotal)+' '+curr);
+  set('doctorTotalCommissionPayable',fmt(salesPayable+Math.max(0,externalTotal-externalPaidTotal))+' '+curr);
+  const ss=document.getElementById('doctorSalesCommissionPayoutStatus');
+  if(ss) ss.innerHTML=target>0 ? (targetMet ? '✅ تم تحقيق تارجت المبيعات — بونص المبيعات متاح للصرف.' : '🔒 لم يتحقق تارجت المبيعات — بونص المبيعات غير متاح للصرف.') : 'ℹ️ لا يوجد تارجت للمبيعات.';
+  const es=document.getElementById('doctorExternalCommissionPayoutStatus');
+  if(es) es.innerHTML='ℹ️ بونص العمل الخارجي منفصل لكل دكتور، ولا يوجد له تارجت. نسبة كل دكتور محفوظة مع عملياته.';
+  const sa=document.getElementById('doctorSalesCommissionPayoutActions');
+  if(sa) sa.innerHTML=salesPayable>0.009 ? `<button class="btn small" onclick="confirmDoctorCommissionPayout('sales','${from}','${to}')">✅ تأكيد صرف بونص المبيعات (${fmt(salesPayable)})</button>` : '<span class="empty-note">لا يوجد بونص مبيعات جديد متاح للصرف.</span>';
+}
+function getDoctorExternalRateMap(){
+  if(!settings.doctorExternalRates || typeof settings.doctorExternalRates!=='object' || Array.isArray(settings.doctorExternalRates)) settings.doctorExternalRates={};
+  return settings.doctorExternalRates;
+}
+function doctorProfileNames(){
+  const names=new Set();
+  Object.keys(getDoctorExternalRateMap()).forEach(n=>{ if(String(n).trim()) names.add(String(n).trim()); });
+  externalServices.forEach(s=>{ const n=externalServiceDoctorName(s); if(n && n!=='غير محدد') names.add(n); });
+  return [...names].sort((a,b)=>a.localeCompare(b,'ar'));
+}
+function selectedServiceDoctorName(){
+  const sel=document.getElementById('serviceDoctorSelect');
+  const v=(sel?.value||'').trim();
+  return v==='__new__' ? (document.getElementById('serviceNewDoctorName')?.value||'').trim() : v;
+}
+function renderServiceDoctorSelect(selectedName=''){
+  const sel=document.getElementById('serviceDoctorSelect'); if(!sel) return;
+  const names=doctorProfileNames();
+  sel.innerHTML='<option value="">— اختر اسم الطبيب —</option>'+names.map(n=>`<option value="${esc(n)}">${esc(n)}</option>`).join('')+'<option value="__new__">➕ إضافة اسم جديد</option>';
+  if(selectedName && names.includes(selectedName)) sel.value=selectedName;
+  else if(selectedName){ sel.value='__new__'; const ne=document.getElementById('serviceNewDoctorName'); if(ne) ne.value=selectedName; }
+  else sel.value='';
+  onServiceDoctorSelectChange();
+}
+function onServiceDoctorSelectChange(){
+  const sel=document.getElementById('serviceDoctorSelect'); const isNew=sel?.value==='__new__';
+  const field=document.getElementById('serviceNewDoctorField'); if(field) field.style.display=isNew?'':'none';
+  if(!isNew){ const ne=document.getElementById('serviceNewDoctorName'); if(ne) ne.value=''; }
+  const name=selectedServiceDoctorName(); const hidden=document.getElementById('serviceDoctorName'); if(hidden) hidden.value=name;
+  applyDoctorDefaultRate();
+}
+function applyDoctorDefaultRate(){
+  const name=selectedServiceDoctorName(), map=getDoctorExternalRateMap(), el=document.getElementById('serviceDoctorCommissionPct');
+  if(!el) return;
+  if(name && Object.prototype.hasOwnProperty.call(map,name)) el.value=Math.min(50,Math.max(0,Number(map[name])||0));
+}
+function renderDoctorExternalDoctorManager(){
+  const box=document.getElementById('doctorExternalDoctorManager');
+  const names=doctorProfileNames();
+  renderServiceDoctorSelect(selectedServiceDoctorName());
+  if(!box) return;
+  const isManager = currentUser && currentUser.role==='manager';
+  if(!isManager){ box.innerHTML='<div class="empty-note">إدارة أسماء ونسب الأطباء متاحة للمدير فقط.</div>'; return; }
+  box.innerHTML=`<table><thead><tr><th>اسم الدكتور</th><th>النسبة الافتراضية للأعمال الجديدة</th><th></th></tr></thead><tbody>${names.map(name=>{
+    const rate=Object.prototype.hasOwnProperty.call(getDoctorExternalRateMap(),name) ? Number(getDoctorExternalRateMap()[name])||0 : Number(externalServices.find(s=>externalServiceDoctorName(s)===name)?.doctorCommissionPct)||0;
+    return `<tr><td><input id="docName_${encodeURIComponent(name)}" value="${esc(name)}" style="min-width:150px"></td><td><input type="number" id="docRate_${encodeURIComponent(name)}" min="0" max="50" step="0.01" value="${Math.min(50,Math.max(0,rate))}" style="width:120px"></td><td><button class="btn small" onclick="saveDoctorExternalProfile(${JSON.stringify(name)})">💾 حفظ</button></td></tr>`;
+  }).join('')}</tbody></table>`;
+}
+async function saveDoctorExternalProfile(oldName){
+  const isManager = currentUser && currentUser.role==='manager';
+  if(!isManager){ showToast('إدارة الأطباء متاحة للمدير فقط'); return; }
+  const key=encodeURIComponent(oldName);
+  const nameEl=document.getElementById('docName_'+key), rateEl=document.getElementById('docRate_'+key);
+  const newName=(nameEl?.value||'').trim();
+  const rate=Math.min(50,Math.max(0,Number(rateEl?.value)||0));
+  if(!newName){ showToast('اسم الدكتور مطلوب'); return; }
+  const map=getDoctorExternalRateMap();
+  if(newName!==oldName && Object.keys(map).includes(newName) && newName!==oldName){ showToast('اسم الدكتور الجديد موجود بالفعل'); return; }
+  // Rename historical operations without changing their saved historical rate.
+  if(newName!==oldName){ externalServices.forEach(s=>{ if(externalServiceDoctorName(s)===oldName) s.doctorName=newName; }); }
+  delete map[oldName];
+  map[newName]=rate;
+  settings.doctorExternalRates=map;
+  await saveSettings();
+  await saveExternalServices();
+  const picker=document.getElementById('doctorCommissionMonthPicker');
+  renderDoctorBonusCommissionPanel((picker&&picker.value)||todayISO().slice(0,7));
+  showToast('تم حفظ اسم الدكتور ونسبته للأعمال الجديدة ✔️');
+}
+
+async function confirmDoctorCommissionPayout(type,from,to,doctorName=null){
+  const isManager = currentUser && currentUser.role==='manager';
+  if(!isManager){ showToast('تأكيد صرف عمولة الدكتور متاح للمدير فقط'); return; }
+  const d=doctorCommissionForPeriod(from,to,currentBranchId());
+  const target=Math.max(0,Number(settings.doctorSalesCommissionTarget)||0);
+  if(type==='sales' && target>0 && Number(d.salesCashCollected||0)+Number(d.salesCreditCollected||0)+0.009<target){ showToast('لا يمكن صرف عمولة المبيعات قبل تحقيق التارجت'); return; }
+  const already=doctorCommissionPayoutsInPeriod(from,to,type,currentBranchId(),doctorName).reduce((sum,e)=>sum+(Number(e.amount)||0),0);
+  const total=type==='sales' ? Number(d.salesCommission||0) : Number(((d.externalCommissionByDoctor||{})[doctorName||'غير محدد']||{}).commission||0);
+  const amount=Math.max(0,+(total-already).toFixed(2));
+  if(amount<=0.009){ showToast('لا توجد عمولة جديدة للصرف'); return; }
+  const label=type==='sales'?'عمولة الطبيب — المبيعات والتحصيل الآجل':`بونص العمل الخارجي — الدكتور ${doctorName||'غير محدد'}`;
+  if(!(await showConfirm(`تأكيد صرف ${fmt(amount)} ${currLabel()} كـ ${label} لشهر ${from.slice(0,7)}؟\nسيتم تسجيلها كمصروف فعلي ولن تُحسب مرة أخرى.`))) return;
+  expenses.push({id:uid(),category:label,amount,method:'cash',date:new Date().toISOString(),note:`صرف بونص الدكتور ${doctorName||''} عن الفترة ${from} إلى ${to}`,by:currentUser.username,branchId:currentBranchId(),doctorCommissionPayout:true,doctorCommissionType:type,doctorName:doctorName||undefined,commissionPeriodFrom:from,commissionPeriodTo:to});
+  await saveExpenses();
+  if(window.CloudSync) CloudSync.recordAudit('تأكيد صرف عمولة الدكتور',`${label} — ${fmt(amount)}`);
+  renderExpensesTable(); renderAll();
+  showToast('تم تأكيد صرف العمولة وإضافتها للمصروفات ✔️');
+}
+
 function renderExpensesTable(){
   const tbody = document.getElementById('expensesTable');
   if(!tbody) return;
@@ -7957,6 +8334,7 @@ function renderExpensesTable(){
   }
   document.getElementById('expensesThisMonth').textContent = fmt(monthly.reduce((s,e)=>s+e.amount,0));
   document.getElementById('expensesAllTime').textContent = fmt(expenses.filter(belongsToCurrentBranch).reduce((s,e)=>s+e.amount,0));
+  renderDoctorBonusCommissionPanel(selectedMonth);
 }
 
 function openExpenseModal(id){
@@ -8002,8 +8380,8 @@ async function saveExpense(){
   renderAll();
   showToast('تم حفظ المصروف');
 }
-function deleteExpense(id){
-  if(!confirm('حذف هذا المصروف؟')) return;
+async function deleteExpense(id){
+  if(!(await showConfirm('حذف هذا المصروف؟'))) return;
   const e = expenses.find(x=>x.id===id);
   expenses = expenses.filter(x=>x.id!==id);
   saveExpenses().then(()=>{
@@ -8190,7 +8568,7 @@ async function submitRegisterClosing(){
   const note = document.getElementById('closingNote').value.trim();
 
   if(Math.abs(variance) > 0.009 && !note){
-    if(!confirm(`يوجد فرق قدره ${fmt(variance)} ولم تكتب ملاحظة توضّحه. هل تريد المتابعة؟`)) return;
+    if(!(await showConfirm(`يوجد فرق قدره ${fmt(variance)} ولم تكتب ملاحظة توضّحه. هل تريد المتابعة؟`))) return;
   }
 
   registerClosings.push({
@@ -8270,7 +8648,8 @@ function getUserPermission(user, key){
   // Anything outside these three known keys defaults to DENIED — a new
   // permission added later without an explicit case here must fail safe,
   // not silently grant access to everyone.
-  if(key === 'discount' || key === 'deleteInvoice') return true;
+  if(key === 'discount') return true;
+  if(key === 'deleteInvoice') return !!(user && (user.role==='manager' || user.role==='branch_manager') && user.permissions && user.permissions[key] !== false);
   return false;
 }
 function hasPerm(key){ return getUserPermission(currentUser, key); }
@@ -8285,23 +8664,33 @@ function hasPerm(key){ return getUserPermission(currentUser, key); }
 function renderServicesTable(){
   const tbody = document.getElementById('servicesTable');
   if(!tbody) return;
+  const canSeeProfit = hasPerm('seeCosts');
+  const costHeaderEl = document.getElementById('serviceCostHeader');
+  const netHeaderEl = document.getElementById('serviceNetHeader');
+  if(costHeaderEl) costHeaderEl.style.display = canSeeProfit ? '' : 'none';
+  if(netHeaderEl) netHeaderEl.style.display = canSeeProfit ? '' : 'none';
   const sorted = externalServices.filter(belongsToCurrentBranch).sort((a,b)=>new Date(b.date)-new Date(a.date));
   if(!sorted.length){
-    tbody.innerHTML = `<tr><td colspan="10" class="empty-note" style="text-align:center; padding:22px;">لا يوجد أعمال خارجية أو كشوفات مسجّلة بعد</td></tr>`;
+    tbody.innerHTML = `<tr><td colspan="13" class="empty-note" style="text-align:center; padding:22px;">لا يوجد أعمال خارجية أو كشوفات مسجّلة بعد</td></tr>`;
     return;
   }
   const methodLabel = m => m==='cash'?'نقدي':m==='card'?'شبكة':m==='transfer'?'تحويل بنكي':'آجل';
   tbody.innerHTML = sorted.map(s=>{
     const cust = s.customerId ? (customers.find(c=>c.id===s.customerId)||{}).name : '';
-    const net = s.amount - (s.pharmacyCost||0) - (s.otherCost||0);
+    const net = externalServiceNet(s);
+    const profileMap=getDoctorExternalRateMap(); const savedName=externalServiceDoctorName(s); const externalRate = Math.min(50, Math.max(0, Number(s.doctorCommissionPct ?? profileMap[savedName] ?? settings.doctorExternalCommissionPct ?? 0)||0));
+    const externalBonus = +(Math.max(0, net) * externalRate / 100).toFixed(2);
     return `<tr>
       <td>${dmy((s.date||'').slice(0,10))}</td>
       <td>${esc(cust||'—')}</td>
+      <td class="item-name">${esc(s.doctorName||'غير محدد')}</td>
       <td class="item-name">${esc(s.serviceType)}</td>
       <td>${esc(s.description||'—')}</td>
       <td class="num">${fmt(s.amount)}</td>
-      <td class="num">${fmt((s.pharmacyCost||0)+(s.otherCost||0))}</td>
-      <td class="num" style="font-weight:700;">${fmt(net)}</td>
+      <td class="num" style="${canSeeProfit?'':'display:none;'}">${canSeeProfit ? fmt((s.pharmacyCost||0)+(s.otherCost||0)) : ''}</td>
+      <td class="num" style="font-weight:700; ${canSeeProfit?'':'display:none;'}">${canSeeProfit ? fmt(net) : ''}</td>
+      <td class="num">${fmt(externalRate)}%</td>
+      <td class="num" style="font-weight:800;">${fmt(externalBonus)}</td>
       <td>${methodLabel(s.paymentMethod)}</td>
       <td>${esc(s.by||'—')}</td>
       <td><div class="row-actions">
@@ -8337,6 +8726,9 @@ function openServiceModal(id){
     if(!s){ closeServiceModal(); return; }
     document.getElementById('serviceModalTitle').textContent = 'تعديل عمل خارجي / كشف';
     document.getElementById('serviceType').value = s.serviceType;
+    renderServiceDoctorSelect(s.doctorName||'');
+    document.getElementById('serviceDoctorName').value = s.doctorName||'';
+    document.getElementById('serviceDoctorCommissionPct').value = s.doctorCommissionPct ?? settings.doctorExternalCommissionPct ?? 0;
     document.getElementById('serviceDescription').value = s.description||'';
     document.getElementById('serviceAmount').value = s.amount;
     document.getElementById('servicePharmacyCost').value = s.pharmacyCost||0;
@@ -8349,6 +8741,10 @@ function openServiceModal(id){
   } else {
     document.getElementById('serviceModalTitle').textContent = 'تسجيل عمل خارجي / كشف';
     document.getElementById('serviceType').value = 'كشف';
+    renderServiceDoctorSelect('');
+    document.getElementById('serviceDoctorName').value = '';
+    document.getElementById('serviceDoctorCommissionPct').value = settings.doctorExternalCommissionPct ?? 0;
+    applyDoctorDefaultRate();
     document.getElementById('serviceDescription').value = '';
     document.getElementById('serviceAmount').value = '';
     document.getElementById('servicePharmacyCost').value = 0;
@@ -8361,11 +8757,13 @@ function openServiceModal(id){
   updateServiceNetPreview();
 }
 function updateServiceNetPreview(){
+  const el = document.getElementById('serviceNetPreview');
+  if(!hasPerm('seeCosts')){ el.textContent = ''; return; }
   const amount = parseFloat(document.getElementById('serviceAmount').value)||0;
   const pharmacyCost = parseFloat(document.getElementById('servicePharmacyCost').value)||0;
   const otherCost = parseFloat(document.getElementById('serviceOtherCost').value)||0;
   const net = amount - pharmacyCost - otherCost;
-  document.getElementById('serviceNetPreview').textContent = `صافي الربح من هذه العملية: ${fmt(net)} ${settings.currency||''}`;
+  el.textContent = `صافي الربح من هذه العملية: ${fmt(net)} ${settings.currency||''}`;
 }
 function closeServiceModal(){ document.getElementById('serviceModalOverlay').classList.remove('active'); }
 async function saveService(){
@@ -8380,6 +8778,20 @@ async function saveService(){
     if(!customerId){ showToast('اختر العميل صاحب الحساب الآجل'); return; }
   }
   const serviceType = document.getElementById('serviceType').value;
+  const doctorName = selectedServiceDoctorName();
+  document.getElementById('serviceDoctorName').value=doctorName;
+  const doctorCommissionPct = Math.min(50, Math.max(0, parseFloat(document.getElementById('serviceDoctorCommissionPct').value)||0));
+  if(!doctorName){ showToast('اختر اسم الدكتور أو اختر إضافة اسم جديد'); return; }
+  const isNewDoctor=document.getElementById('serviceDoctorSelect')?.value==='__new__';
+  const isManager = currentUser && currentUser.role==='manager';
+  if(isNewDoctor && !isManager){ showToast('إضافة اسم طبيب جديد متاحة للمدير فقط'); return; }
+  if(isManager){
+    getDoctorExternalRateMap()[doctorName]=doctorCommissionPct;
+    settings.doctorExternalRates=getDoctorExternalRateMap();
+    // حفظ إعداد الطبيب محليًا أولًا؛ فشل المزامنة السحابية لا يمنع حفظ العمل.
+    try{ await setKey('vetpharm:settings', settings); }catch(e){ console.error('doctor settings local save failed', e); }
+    try{ if(window.CloudSync && currentUser && currentUser.role==='manager') CloudSync.pushCollection('settings'); }catch(e){ console.warn('doctor settings cloud sync failed', e); }
+  }
   const description = document.getElementById('serviceDescription').value.trim();
   const date = document.getElementById('serviceDate').value || todayISO();
   const note = document.getElementById('serviceNote').value.trim();
@@ -8387,30 +8799,43 @@ async function saveService(){
   if(id){
     const s = externalServices.find(x=>x.id===id);
     if(s){
-      s.serviceType=serviceType; s.description=description; s.amount=amount;
+      s.serviceType=serviceType; s.doctorName=doctorName; s.doctorCommissionPct=doctorCommissionPct; s.description=description; s.amount=amount;
       s.pharmacyCost=pharmacyCost; s.otherCost=otherCost;
       s.paymentMethod=method; s.customerId=customerId||undefined;
       s.date=date+'T12:00:00.000Z'; s.note=note;
     }
   } else {
-    externalServices.push({id:uid(), serviceType, description, amount, pharmacyCost, otherCost, paymentMethod:method,
+    externalServices.push({id:uid(), serviceType, doctorName, doctorCommissionPct, description, amount, pharmacyCost, otherCost, paymentMethod:method,
       customerId: customerId||undefined, date:date+'T12:00:00.000Z', note, by: currentUser.username, branchId: currentBranchId()});
   }
-  await saveExternalServices();
-  if(window.CloudSync) CloudSync.recordAudit(id?'تعديل عمل خارجي/كشف':'تسجيل عمل خارجي/كشف', `${serviceType} — ${fmt(amount)}`);
+  // احفظ السجل محليًا أولًا. المزامنة السحابية اختيارية ولا يجب أن تمنع
+  // حفظ العملية على الجهاز إذا كان الإنترنت/Firestore غير متاح أو حدث خطأ فيه.
+  try{ await setKey('vetpharm:external_services', externalServices); }
+  catch(e){ console.error('external service local save failed', e); showToast('تعذر حفظ العمل الخارجي محليًا — لم يتم إغلاق النافذة'); return; }
+  try{ if(window.CloudSync) CloudSync.pushCollection('externalServices'); }
+  catch(e){ console.warn('external service cloud sync failed', e); }
+  try{ if(window.CloudSync) CloudSync.recordAudit(id?'تعديل عمل خارجي/كشف':'تسجيل عمل خارجي/كشف', `${serviceType} — ${fmt(amount)}`); }
+  catch(e){ console.warn('external service audit sync failed', e); }
   closeServiceModal();
   renderServicesTable();
   renderCustomersTable();
+  renderDoctorExternalDoctorManager();
+  // تحديث البونص فورًا حتى لو صفحة البونص مخفية حاليًا.
+  // نعرض نفس شهر تاريخ العمل الخارجي الذي تم حفظه، بدون أي تارجت.
+  const bonusMonth = (date || todayISO()).slice(0,7);
+  const bonusPicker = document.getElementById('doctorCommissionMonthPicker');
+  if(bonusPicker) bonusPicker.value = bonusMonth;
+  renderDoctorBonusCommissionPanel(bonusMonth);
   renderAll();
-  showToast('تم حفظ العملية');
+  showToast('تم حفظ العملية وتحديث بونص العمل الخارجي تلقائيًا');
 }
-function deleteService(id){
-  if(!confirm('حذف هذا السجل؟')) return;
+async function deleteService(id){
+  if(!(await showConfirm('حذف هذا السجل؟'))) return;
   const s = externalServices.find(x=>x.id===id);
   externalServices = externalServices.filter(x=>x.id!==id);
   saveExternalServices().then(()=>{
     if(window.CloudSync && s) CloudSync.recordAudit('حذف عمل خارجي/كشف', `${s.serviceType} — ${fmt(s.amount)}`);
-    renderServicesTable(); renderCustomersTable(); renderAll();
+    renderServicesTable(); renderCustomersTable(); renderDoctorBonusCommissionPanel(); renderAll();
   });
 }
 
@@ -8682,7 +9107,7 @@ async function confirmReceiveTransfer(id){
   const t = stockTransfers.find(x=>x.id===id);
   if(!t || t.status!=='pending') return;
   if(t.toBranchId !== currentBranchId()){ showToast('هذا التحويل ليس موجّهًا لفرعك'); return; }
-  if(!confirm(`تأكيد استلام ${ar(t.quantity)} من "${t.itemName}" من ${t.fromBranchName}؟`)) return;
+  if(!(await showConfirm(`تأكيد استلام ${ar(t.quantity)} من "${t.itemName}" من ${t.fromBranchName}؟`))) return;
 
   let it = items.find(i=>i.id===t.itemId);
   if(!it){
@@ -8762,25 +9187,155 @@ function renderTransfers(){
   updateTransfersBadge();
 }
 
+// ===== External work costs & doctor commissions =====
+function externalServiceCost(s){
+  return Math.max(0, Number(s && s.pharmacyCost)||0) + Math.max(0, Number(s && s.otherCost)||0);
+}
+function externalServiceNet(s){
+  return +(Math.max(0, Number(s && s.amount)||0) - externalServiceCost(s)).toFixed(2);
+}
+function externalServiceDoctorName(s){
+  return String((s && s.doctorName) || 'غير محدد').trim() || 'غير محدد';
+}
+function externalServiceDoctorRate(s){
+  const map=getDoctorExternalRateMap();
+  const name=externalServiceDoctorName(s);
+  return Math.min(50, Math.max(0, Number((s && s.doctorCommissionPct) ?? map[name] ?? settings.doctorExternalCommissionPct ?? 0)||0));
+}
+function immediateCollectedAmountForTransaction(t){
+  // Every payment method except credit earns the doctor commission immediately.
+  // For split invoices, only the non-credit portions are earned immediately;
+  // the credit portion is earned later when the customer actually pays it.
+  const total = Number(t.total)||0;
+  if(t.paymentMethod !== 'split') return (t.paymentMethod||'cash') !== 'credit' ? total : 0;
+  const props = splitProportions(t.originalSaleId || t.saleId);
+  if(!props) return 0;
+  const nonCreditRatio = props.filter(p=>p.method!=='credit').reduce((sum,p)=>sum+(Number(p.ratio)||0),0);
+  return +(total * nonCreditRatio).toFixed(2);
+}
+
+// Customer payments are account-level rather than invoice-level in the existing
+// data model. We therefore allocate each payment FIFO across the customer's
+// oldest outstanding sales/services. This lets doctor commission be earned only
+// when a credit amount is actually collected, without counting the same payment twice.
+function doctorCommissionForPeriod(from, to, branchId){
+  const salesPct = Math.max(0, Number(settings.doctorSalesCommissionPct ?? 1)||0) / 100;
+  const externalPct = Math.min(50, Math.max(0, Number(settings.doctorExternalCommissionPct ?? 0)||0)) / 100;
+  const inRange = d => { const x=localDateOf(d); return x>=from && x<=to; };
+  const belongs = x => branchId ? (x.branchId||null)===branchId : belongsToCurrentBranch(x);
+
+  const externalByDoctor = {};
+  const ensureExternalDoctor = (name, rate) => {
+    const n = String(name||'غير محدد').trim() || 'غير محدد';
+    if(!externalByDoctor[n]) externalByDoctor[n] = {doctorName:n, rate:Math.min(50,Math.max(0,Number(rate)||0)), netCollected:0, commission:0};
+    return externalByDoctor[n];
+  };
+  // Immediate commissions: ALL non-credit payment methods (cash, card,
+  // transfer, etc.) for sales and external work. Returns reduce the
+  // commission exactly like they reduce the collected sale value.
+  let salesCashCollected = 0;
+  transactions.filter(t=>(t.type==='sale'||t.type==='return') && inRange(t.date) && belongs(t)).forEach(t=>{
+    salesCashCollected += immediateCollectedAmountForTransaction(t);
+  });
+  const externalCashCollected = externalServices.filter(s=>inRange(s.date) && (s.paymentMethod||'cash')!=='credit' && belongs(s))
+    .reduce((sum,s)=>sum+Math.max(0, externalServiceNet(s)),0);
+  externalServices.filter(s=>inRange(s.date) && (s.paymentMethod||'cash')!=='credit' && belongs(s)).forEach(s=>{
+    const net=Math.max(0, externalServiceNet(s));
+    const row=ensureExternalDoctor(externalServiceDoctorName(s), externalServiceDoctorRate(s));
+    row.netCollected+=net;
+  });
+
+  // Build every credit charge first. The existing customer-account model does
+  // not link a payment to a specific invoice, so FIFO is used consistently.
+  // We process ALL payments up to the report end date so old settlements cannot
+  // be counted again as if they were still outstanding in the selected period.
+  const chargesByCustomer = {};
+  function addCharge(customerId, date, amount, type, branch, sourceId, doctorName, doctorRate){
+    if(!customerId || Math.abs(amount)<0.009) return;
+    (chargesByCustomer[customerId] ||= []).push({date, amount:Number(amount), remaining:Number(amount), type, branchId:branch||null, sourceId, doctorName:doctorName||null, doctorRate:doctorRate==null?null:Number(doctorRate)});
+  }
+  transactions.filter(t=>(t.type==='sale'||t.type==='return') && t.paymentMethod==='credit' && t.customerId).forEach(t=>{
+    addCharge(t.customerId, t.date, Number(t.total)||0, 'sale', t.branchId, t.saleId||t.id);
+  });
+  transactions.filter(t=>(t.type==='sale'||t.type==='return') && t.paymentMethod==='split').forEach(t=>{
+    const props=splitProportions(t.originalSaleId || t.saleId); if(!props) return;
+    props.filter(p=>p.method==='credit' && p.customerId).forEach(p=>{
+      addCharge(p.customerId, t.date, +((Number(t.total)||0)*p.ratio).toFixed(2), 'sale', t.branchId, t.saleId||t.id);
+    });
+  });
+  externalServices.filter(s=>s.paymentMethod==='credit' && s.customerId).forEach(s=>{
+    addCharge(s.customerId, s.date, Math.max(0, externalServiceNet(s)), 'external', s.branchId, s.id, externalServiceDoctorName(s), externalServiceDoctorRate(s));
+  });
+  Object.values(chargesByCustomer).forEach(list=>list.sort((a,b)=>new Date(a.date)-new Date(b.date)));
+
+  // Negative credit transactions are returns. Apply them against the oldest
+  // outstanding sale before payments are allocated.
+  Object.values(chargesByCustomer).forEach(list=>{
+    let positives=[];
+    list.forEach(ch=>{
+      if(ch.amount>=0){ positives.push(ch); return; }
+      let reduce=-ch.amount;
+      for(const p of positives){ if(reduce<=0.009) break; const take=Math.min(p.remaining,reduce); p.remaining-=take; reduce-=take; }
+      ch.remaining=0;
+    });
+  });
+
+  let collectedSales = 0;
+  let collectedExternal = 0;
+  customerPayments.filter(p=>Number(p.amount)>0 && p.customerId && localDateOf(p.date)<=to && belongs(p))
+    .sort((a,b)=>new Date(a.date)-new Date(b.date)).forEach(p=>{
+      let pool=Number(p.amount)||0;
+      const list=chargesByCustomer[p.customerId]||[];
+      for(const ch of list){
+        if(pool<=0.009) break;
+        if(ch.remaining<=0.009) continue;
+        const take=Math.min(pool,ch.remaining);
+        ch.remaining-=take; pool-=take;
+        // Only payments physically received in the selected period earn a
+        // commission in this report. Earlier payments are merely settlement
+        // history used to establish the correct remaining balance.
+        if(inRange(p.date)){
+          if(ch.type==='sale') collectedSales+=take;
+          else { collectedExternal+=take; const row=ensureExternalDoctor(ch.doctorName,ch.doctorRate); row.netCollected+=take; }
+        }
+      }
+    });
+
+  const salesCashCommission = +(salesCashCollected*salesPct).toFixed(2);
+  const salesCreditCommission = +(collectedSales*salesPct).toFixed(2);
+  Object.values(externalByDoctor).forEach(row=>{ row.netCollected=+row.netCollected.toFixed(2); row.commission=+(row.netCollected*row.rate/100).toFixed(2); });
+  const externalCashCommission = +(externalCashCollected*externalPct).toFixed(2);
+  const externalCreditCommission = +(collectedExternal*externalPct).toFixed(2);
+  const externalCommissionByDoctor = externalByDoctor;
+  const externalCommissionTotal = Object.values(externalByDoctor).reduce((sum,row)=>sum+row.commission,0);
+  return {
+    salesCashCollected:+salesCashCollected.toFixed(2),
+    salesCreditCollected:+collectedSales.toFixed(2),
+    externalCashCollected:+externalCashCollected.toFixed(2),
+    externalCreditCollected:+collectedExternal.toFixed(2),
+    salesCashCommission,
+    salesCreditCommission,
+    salesCommission:+(salesCashCommission+salesCreditCommission).toFixed(2),
+    externalCashCommission,
+    externalCreditCommission,
+    externalCommission:+externalCommissionTotal.toFixed(2),
+    externalCommissionByDoctor,
+    totalCommission:+(salesCashCommission+salesCreditCommission+externalCommissionTotal).toFixed(2)
+  };
+}
+
 function renderDashboard(){
   const today = todayISO();
   const todaySales = transactions.filter(t=>t.type==='sale' && localDateOf(t.date)===today && belongsToCurrentBranch(t));
   const todayTx = transactions.filter(t=>(t.type==='sale'||t.type==='return') && localDateOf(t.date)===today && belongsToCurrentBranch(t));
-  const todayUsage = usageLogs.filter(u=>{
-    if(localDateOf(u.date)!==today) return false;
-    const oi = openedItems.find(o=>o.id===u.openedItemId);
-    return oi ? belongsToCurrentBranch(oi) : true;
-  });
-  
   const todaySaleIds = [...new Set(todaySales.map(t=>t.saleId||t.id))];
   const salesRevenue = todayTx.reduce((s,t)=>s+t.total,0);
   const salesProfit = todayTx.reduce((s,t)=>s+txProfit(t),0);
   
-  const usageRevenue = todayUsage.reduce((s,u)=>s+u.chargedAmount,0);
-  const usageProfit = todayUsage.reduce((s,u)=>s+(u.chargedAmount - u.buyCostAmount),0);
-
-  const totalProfit = salesProfit + usageProfit;
-  const totalRevenue = salesRevenue + usageRevenue;
+  // لوحة التحكم الرئيسية تعرض المبيعات فقط. العمل الخارجي والاستهلاك
+  // لا يدخلان في أرقام المبيعات أو الربح المعروض هنا.
+  const totalProfit = salesProfit;
+  const totalRevenue = salesRevenue;
 
   document.getElementById('todayProfit').textContent = fmt(totalProfit);
   document.getElementById('todayRevenue').textContent = fmt(totalRevenue);
@@ -8795,19 +9350,12 @@ function renderDashboard(){
   const netValEl = document.getElementById('todayNetProfit');
   if(canSeeFinance){
     const todayExpenses = expensesTotal(today, today);
-    // External work/consultations are 100% margin (no inventory cost), so
-    // their full amount goes straight into the net figure alongside the
-    // gross item profit above.
-    // Net of pharmacy/other costs consumed during the visit, so this
-    // doesn't overstate today's real profit.
-    const todayServicesRevenue = externalServices.filter(s=>(s.date||'').slice(0,10)===today && belongsToCurrentBranch(s))
-      .reduce((s,x)=>s+(x.amount-(x.pharmacyCost||0)-(x.otherCost||0)),0);
-    const netProfit = totalProfit + todayServicesRevenue - todayExpenses;
+    const doctor = doctorCommissionForPeriod(today, today);
+    const netProfit = totalProfit - todayExpenses;
     netValEl.textContent = fmt(netProfit);
     const parts = [];
-    if(todayServicesRevenue>0) parts.push(`+ أعمال خارجية ${fmt(todayServicesRevenue)}`);
     if(todayExpenses>0) parts.push(`- مصروفات ${fmt(todayExpenses)}`);
-    netLabelEl.textContent = parts.length ? `صافي الربح الحقيقي (${parts.join('، ')})` : 'صافي الربح الحقيقي (لا مصروفات أو أعمال خارجية اليوم)';
+    netLabelEl.textContent = parts.length ? `صافي ربح المبيعات الحقيقي (${parts.join('، ')})` : 'صافي ربح المبيعات الحقيقي';
     netValEl.parentElement.style.display = '';
     netLabelEl.style.display = '';
   } else {
@@ -9251,7 +9799,7 @@ async function deleteSupplier(id){
     showToast(`لا يمكن حذف مورد له مبلغ مستحق (${fmt(bal)}) — سدّد المبلغ أو سجّله كدفعة أولًا`);
     return;
   }
-  if(!confirm('حذف هذا المورد؟')) return;
+  if(!(await showConfirm('حذف هذا المورد؟'))) return;
   suppliers = suppliers.filter(s=>s.id!==id);
   await saveSuppliers(); renderSuppliersTable(); populateSelects();
 }
@@ -9545,13 +10093,13 @@ async function saveCustomer(){
     showToast('تم حفظ بيانات العميل');
   }
 }
-function deleteCustomer(id){
+async function deleteCustomer(id){
   const bal = customerBalance(id);
   if(bal > 0.009){
     showToast(`لا يمكن حذف عميل عليه رصيد مستحق (${fmt(bal)}) — حصّل المبلغ أو سجّله كسداد أولًا`);
     return;
   }
-  if(!confirm('حذف هذا العميل؟')) return;
+  if(!(await showConfirm('حذف هذا العميل؟'))) return;
   customers = customers.filter(x=>x.id!==id);
   saveCustomers().then(()=>{ renderCustomersTable(); });
 }
@@ -9928,7 +10476,7 @@ async function deleteUser(id){
   if(!canManageThisUser(u)){ showToast('غير مسموح لك بحذف هذا المستخدم'); return; }
   if(users.length<=1){ showToast('لا يمكن حذف آخر مستخدم'); return; }
   if(u.id===currentUser.id){ showToast('لا يمكنك حذف حسابك الحالي'); return; }
-  if(!confirm('حذف هذا المستخدم؟')) return;
+  if(!(await showConfirm('حذف هذا المستخدم؟'))) return;
   // SECURITY: cut off this user's cloud access BEFORE removing them
   // locally. Without this, deleting a cashier here only removed them from
   // this device's list — their cloud account kept full access to the
@@ -10000,7 +10548,7 @@ async function deleteBranch(id){
     showToast('لا يمكن حذف هذا الفرع — يوجد مستخدمون مربوطون به: ' + assignedUsers.map(u=>u.username).join('، '));
     return;
   }
-  if(!confirm('حذف هذا الفرع؟')) return;
+  if(!(await showConfirm('حذف هذا الفرع؟'))) return;
   branches = branches.filter(b=>b.id!==id);
   await saveBranches();
   renderBranchesTable();
@@ -10032,7 +10580,7 @@ function renderLoginLogsTable(){
 }
 async function clearLoginLogs(){
   if(!currentUser || currentUser.role!=='manager'){ showToast('غير مسموح لك بإدارة سجل الدخول'); return; }
-  if(!confirm('مسح سجل تسجيلات الدخول بالكامل؟')) return;
+  if(!(await showConfirm('مسح سجل تسجيلات الدخول بالكامل؟'))) return;
   loginLogs = [];
   await saveLoginLogs();
   renderLoginLogsTable();
@@ -10766,14 +11314,20 @@ function renderReport(){
   const usageRevenue = usages.reduce((s,u)=>s+u.chargedAmount,0);
   const usageCost = usages.reduce((s,u)=>s+u.buyCostAmount,0);
 
-  const totalRev = revenue + usageRevenue;
-  const totalCost = salesCost + usageCost;
+  const serviceRows = externalServices.filter(s=>{ const d=(s.date||'').slice(0,10); return d>=from && d<=to && belongsToCurrentBranch(s); });
+  const externalRevenue = serviceRows.reduce((sum,s)=>sum+(Number(s.amount)||0),0);
+  const externalCost = serviceRows.reduce((sum,s)=>sum+externalServiceCost(s),0);
+  const totalRev = revenue + usageRevenue + externalRevenue;
+  const totalCost = salesCost + usageCost + externalCost;
   const profit = totalRev - totalCost;
   const margin = totalRev>0 ? (profit/totalRev*100) : 0;
+  const doctor = doctorCommissionForPeriod(from, to);
 
   const curr = currHTML();
   document.getElementById('repRevenue').innerHTML = fmt(revenue) + ' ' + curr;
   document.getElementById('repUsageTotal').innerHTML = fmt(usageRevenue) + ' ' + curr;
+  document.getElementById('repExternalTotal').innerHTML = fmt(externalRevenue) + ' ' + curr;
+  document.getElementById('repExternalCost').innerHTML = fmt(externalCost) + ' ' + curr;
   document.getElementById('repProfit').innerHTML = fmt(profit) + ' ' + curr;
   document.getElementById('repMargin').textContent = fmt(margin)+'%';
 
@@ -10783,15 +11337,19 @@ function renderReport(){
   const expCards = document.getElementById('repExpenseCards');
   if(canSeeFinance){
     const periodExpenses = expensesTotal(from, to);
-    const periodServicesRevenue = externalServices.filter(s=>{
-      const d = (s.date||'').slice(0,10); return d>=from && d<=to && belongsToCurrentBranch(s);
-    }).reduce((s,x)=>s+(x.amount-(x.pharmacyCost||0)-(x.otherCost||0)),0);
+    const netProfit = profit - periodExpenses;
     document.getElementById('repExpenses').innerHTML = fmt(periodExpenses) + ' ' + curr;
-    document.getElementById('repNetProfit').innerHTML = fmt(profit + periodServicesRevenue - periodExpenses) + ' ' + curr;
+    document.getElementById('repNetProfit').innerHTML = fmt(netProfit) + ' ' + curr;
+    document.getElementById('repDoctorCashSales').innerHTML = fmt(doctor.salesCashCommission) + ' ' + curr;
+    document.getElementById('repDoctorCreditSales').innerHTML = fmt(doctor.salesCreditCommission) + ' ' + curr;
+    document.getElementById('repDoctorExternal').innerHTML = fmt(doctor.externalCommission) + ' ' + curr;
     expCards.style.display = '';
   } else {
     expCards.style.display = 'none';
+    const doctorCards = document.getElementById('repDoctorCards');
+    if(doctorCards) doctorCards.style.display = 'none';
   }
+  if(canSeeFinance){ const doctorCards = document.getElementById('repDoctorCards'); if(doctorCards) doctorCards.style.display = ''; }
 
   const byItem = {};
   sales.forEach(t=>{
@@ -11332,9 +11890,16 @@ function exportReportExcel(){
     byItem[u.itemName].revenue += u.chargedAmount; byItem[u.itemName].cost += (u.buyCostAmount||0);
   });
   const entries = Object.entries(byItem);
-  if(entries.length===0){ showToast('لا توجد بيانات لتصديرها في هذه الفترة'); return; }
-  const headers = ['الصنف','الكمية المباعة','المبيعات','التكلفة','الربح'];
+  const externalRows = externalServices.filter(s=>{ const d=(s.date||'').slice(0,10); return d>=from && d<=to && belongsToCurrentBranch(s); });
+  const externalRevenue = externalRows.reduce((sum,s)=>sum+(Number(s.amount)||0),0);
+  const externalCost = externalRows.reduce((sum,s)=>sum+externalServiceCost(s),0);
+  const doctor = doctorCommissionForPeriod(from, to);
+  if(entries.length===0 && externalRows.length===0){ showToast('لا توجد بيانات لتصديرها في هذه الفترة'); return; }
+  const headers = ['الصنف/البند','الكمية','المبيعات/الإيراد','التكلفة','الربح'];
   const rows = entries.map(([name,d])=>[name, d.qty, +d.revenue.toFixed(2), +d.cost.toFixed(2), +(d.revenue-d.cost).toFixed(2)]);
+  if(externalRows.length) rows.push(['أعمال خارجية وكشوفات', '', +externalRevenue.toFixed(2), +externalCost.toFixed(2), +(externalRevenue-externalCost).toFixed(2)]);
+  rows.push(['عمولة الطبيب — المبيعات غير الآجلة/تحصيل الآجل', '', '', '', +doctor.salesCommission.toFixed(2)]);
+  rows.push(['عمولة الطبيب — العمل الخارجي والكشوفات', '', '', '', +doctor.externalCommission.toFixed(2)]);
   downloadExcelFromRows(`تقرير-الأرباح-${from}-إلى-${to}`, 'التقرير', headers, rows);
   showToast('تم تصدير التقرير كملف Excel');
 }
@@ -11359,15 +11924,23 @@ function exportReportPDF(){
     byItem[u.itemName].revenue += u.chargedAmount; byItem[u.itemName].cost += (u.buyCostAmount||0);
   });
   const entries = Object.entries(byItem).sort((a,b)=>(b[1].revenue-b[1].cost)-(a[1].revenue-a[1].cost));
-  if(entries.length===0){ showToast('لا توجد بيانات لتصديرها في هذه الفترة'); return; }
-  const revenue = sales.reduce((s,t)=>s+t.total,0) + usages.reduce((s,u)=>s+u.chargedAmount,0);
-  const cost = sales.reduce((s,t)=>s+txCost(t),0) + usages.reduce((s,u)=>s+(u.buyCostAmount||0),0);
+  const externalRows = externalServices.filter(s=>{ const d=(s.date||'').slice(0,10); return d>=from && d<=to && belongsToCurrentBranch(s); });
+  if(entries.length===0 && externalRows.length===0){ showToast('لا توجد بيانات لتصديرها في هذه الفترة'); return; }
+  const externalRevenue = externalRows.reduce((sum,s)=>sum+(Number(s.amount)||0),0);
+  const externalCost = externalRows.reduce((sum,s)=>sum+externalServiceCost(s),0);
+  const revenue = sales.reduce((s,t)=>s+t.total,0) + usages.reduce((s,u)=>s+u.chargedAmount,0) + externalRevenue;
+  const cost = sales.reduce((s,t)=>s+txCost(t),0) + usages.reduce((s,u)=>s+(u.buyCostAmount||0),0) + externalCost;
   const profit = revenue - cost;
+  const doctor = doctorCommissionForPeriod(from, to);
+  const netProfit = profit - expensesTotal(from,to);
   const curr = settings.currency||'';
   const totals = [
-    ['إجمالي المبيعات', `${fmt(revenue)} ${curr}`],
-    ['إجمالي التكلفة', `${fmt(cost)} ${curr}`],
-    ['صافي الربح', `${fmt(profit)} ${curr}`],
+    ['إجمالي المبيعات والاستهلاك والعمل الخارجي', `${fmt(revenue)} ${curr}`],
+    ['إجمالي التكلفة (بما فيها تكلفة العمل الخارجي)', `${fmt(cost)} ${curr}`],
+    ['عمولة الطبيب — المبيعات غير الآجلة', `${fmt(doctor.salesCashCommission)} ${curr}`],
+    ['عمولة الطبيب — تحصيل آجل المبيعات', `${fmt(doctor.salesCreditCommission)} ${curr}`],
+    ['عمولة الطبيب — العمل الخارجي والكشوفات', `${fmt(doctor.externalCommission)} ${curr}`],
+    ['صافي الربح الحقيقي بعد المصروفات وعمولة الطبيب', `${fmt(netProfit)} ${curr}`],
   ];
   const headers = ['الصنف','الكمية المباعة','المبيعات','التكلفة','الربح'];
   const rows = entries.map(([name,d])=>[name, ar(d.qty), fmt(d.revenue), fmt(d.cost), fmt(d.revenue-d.cost)]);
