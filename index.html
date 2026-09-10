@@ -4843,6 +4843,22 @@ async function verifyUserPassword(user, plain){
   return user.password === plain;
 }
 function esc(s){ return (s===undefined||s===null?'':String(s)).replace(/[&<>"']/g, c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
+// BUG FIX: JSON.stringify(name) was used to pass a doctor's name into an
+// inline onclick="..." handler. JSON.stringify wraps the value in DOUBLE
+// quotes — but the onclick attribute itself is ALSO double-quoted, so any
+// name embedded that way silently truncated the attribute at the first
+// quote, corrupting the handler (it would run as if the name argument were
+// simply missing/broken, doing nothing when clicked, with no visible
+// error). This wraps the value in single quotes for the JS side and
+// HTML-escapes it for the attribute side, so it's safe in both places
+// regardless of what characters the name contains.
+function jsStrAttr(s){
+  return String(s===undefined||s===null?'':s)
+    .replace(/\\/g,'\\\\')
+    .replace(/'/g,"\\'")
+    .replace(/"/g,'&quot;')
+    .replace(/\n/g,'\\n');
+}
 const ARABIC_DIGITS = ['٠','١','٢','٣','٤','٥','٦','٧','٨','٩'];
 function ar(val){ return String(val==null?'':val); }
 function fmt(n){
@@ -8184,7 +8200,7 @@ function renderDoctorBonusCommissionPanel(selectedMonth){
       table.innerHTML=`<table><thead><tr><th>الدكتور</th><th>صافي العمل الخارجي</th><th>النسبة</th><th>البونص المحسوب</th><th>المصروف</th><th>المتاح للصرف</th><th></th></tr></thead><tbody>${externalRows.map(r=>{
         const paid=doctorCommissionPayoutsInPeriod(from,to,'external',bId,r.doctorName).reduce((sum,e)=>sum+(Number(e.amount)||0),0);
         const payable=Math.max(0,Number(r.commission||0)-paid);
-        return `<tr><td><b>${esc(r.doctorName)}</b></td><td class="num">${fmt(r.netCollected)} ${curr}</td><td class="num">${fmt(r.rate)}%</td><td class="num">${fmt(r.commission)} ${curr}</td><td class="num">${fmt(paid)} ${curr}</td><td class="num"><b>${fmt(payable)} ${curr}</b></td><td>${payable>0.009 && isManager ? `<button class="btn small" onclick="confirmDoctorCommissionPayout('external','${from}','${to}',${JSON.stringify(r.doctorName)})">صرف</button>` : '—'}</td></tr>`;
+        return `<tr><td><b>${esc(r.doctorName)}</b></td><td class="num">${fmt(r.netCollected)} ${curr}</td><td class="num">${fmt(r.rate)}%</td><td class="num">${fmt(r.commission)} ${curr}</td><td class="num">${fmt(paid)} ${curr}</td><td class="num"><b>${fmt(payable)} ${curr}</b></td><td>${payable>0.009 && isManager ? `<button class="btn small" onclick="confirmDoctorCommissionPayout('external','${from}','${to}','${jsStrAttr(r.doctorName)}')">صرف</button>` : '—'}</td></tr>`;
       }).join('')}</tbody></table>`;
     }
   }
@@ -8245,7 +8261,7 @@ function renderDoctorExternalDoctorManager(){
   if(!isManager){ box.innerHTML='<div class="empty-note">إدارة أسماء ونسب الأطباء متاحة للمدير فقط.</div>'; return; }
   box.innerHTML=`<table><thead><tr><th>اسم الدكتور</th><th>النسبة الافتراضية للأعمال الجديدة</th><th></th></tr></thead><tbody>${names.map(name=>{
     const rate=Object.prototype.hasOwnProperty.call(getDoctorExternalRateMap(),name) ? Number(getDoctorExternalRateMap()[name])||0 : Number(externalServices.find(s=>externalServiceDoctorName(s)===name)?.doctorCommissionPct)||0;
-    return `<tr><td><input id="docName_${encodeURIComponent(name)}" value="${esc(name)}" style="min-width:150px"></td><td><input type="number" id="docRate_${encodeURIComponent(name)}" min="0" max="50" step="0.01" value="${Math.min(50,Math.max(0,rate))}" style="width:120px"></td><td><button class="btn small" onclick="saveDoctorExternalProfile(${JSON.stringify(name)})">💾 حفظ</button></td></tr>`;
+    return `<tr><td><input id="docName_${encodeURIComponent(name)}" value="${esc(name)}" style="min-width:150px"></td><td><input type="number" id="docRate_${encodeURIComponent(name)}" min="0" max="50" step="0.01" value="${Math.min(50,Math.max(0,rate))}" style="width:120px"></td><td><button class="btn small" onclick="saveDoctorExternalProfile('${jsStrAttr(name)}')">💾 حفظ</button></td></tr>`;
   }).join('')}</tbody></table>`;
 }
 async function saveDoctorExternalProfile(oldName){
