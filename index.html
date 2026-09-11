@@ -2426,6 +2426,13 @@ const XLSX = (function(){
       <div class="field"><label>كمية الصيدلية</label><input type="number" id="itemQty" step="1" min="0" value="0"></div>
       <div class="field"><label>كمية المخزن</label><input type="number" id="itemWarehouseQty" step="1" min="0" value="0"></div>
     </div>
+    <div class="field-row">
+      <div class="field">
+        <label>نسبة الضريبة المضافة على هذا الصنف (%)</label>
+        <input type="number" id="itemTaxRate" step="0.01" min="0" max="100" value="0">
+        <div class="empty-note">افتراضيًا 0% (زي الأدوية البيطرية المعفاة). غيّرها للأصناف الخاضعة للضريبة زي المستلزمات. السعر أعلاه لا يتغير — الضريبة مجرد تفصيل يظهر في الفاتورة المطبوعة.</div>
+      </div>
+    </div>
     <div class="field-row cols-3">
       <div class="field"><label>حد التنبيه للكمية</label><input type="number" id="itemMinStock" min="0" value="5"></div>
       <div class="field"><label>تاريخ الصلاحية</label><input type="date" lang="ar" id="itemExpiry"></div>
@@ -3206,6 +3213,28 @@ const CloudSync = (function(){
     }catch(e){ /* best effort */ }
   }
 
+  // BUG FIX (accounting): transactions are hard-deleted from Firestore by
+  // deleteRecords() above — but the security rules deny deleting a
+  // transaction outright (accounting records should be voided, not erased,
+  // so history/audits survive). Without this, "delete invoice" would
+  // succeed locally and then silently fail to remove it from the cloud,
+  // and the live listener would resurrect it on the next sync. This pushes
+  // an in-place update instead (e.g. records already marked voided:true),
+  // which the rules DO allow for a manager/branch_manager.
+  async function updateRecords(name, records){
+    if(!connected || !ready() || !settings.cloudPharmacyId || !records || !records.length) return;
+    const base = fbDb.collection('pharmacies').doc(settings.cloudPharmacyId).collection(name);
+    try{
+      for(let i=0;i<records.length;i+=400){
+        const chunk = records.slice(i, i+400);
+        const batch = fbDb.batch();
+        chunk.forEach(r=>batch.set(base.doc(String(r.id)), r));
+        await batch.commit();
+      }
+    }catch(e){ /* offline / rejected — stays dirty-flagged locally and
+      retried like any other pending sync. */ }
+  }
+
   function startRecordListeners(pharmacyId){
     CLOUD_RECORD_COLLECTIONS.forEach(name=>{
       const acc = recordAccessorFor(name);
@@ -3420,6 +3449,22 @@ const CloudSync = (function(){
     if(!cloudUid || !ready() || !settings.cloudPharmacyId) return {ok:false, msg:'غير متصل بالسحابة'};
     try{
       await fbDb.collection('userDirectory').doc(cloudUid).delete();
+      return {ok:true};
+    }catch(e){ return {ok:false, msg: friendlyError(e)}; }
+  }
+
+  // BUG FIX: editing a cloud-linked user's role/branch in the app updated
+  // the local `users` list only — userDirectory/{uid} (the doc the
+  // Firestore security rules actually check role/branch against) was left
+  // untouched. A cashier promoted to branch_manager locally could still be
+  // enforced as a cashier by the rules (or the reverse — someone demoted
+  // locally could keep their old, wider access) until this ran. Requires
+  // the security rules' userDirectory update rule to permit a manager
+  // updating a DIFFERENT user's role/branchId (never their own).
+  async function updateUserRole(cloudUid, role, branchId){
+    if(!cloudUid || !ready() || !settings.cloudPharmacyId) return {ok:false, msg:'غير متصل بالسحابة'};
+    try{
+      await fbDb.collection('userDirectory').doc(cloudUid).update({role, branchId: branchId||null});
       return {ok:true};
     }catch(e){ return {ok:false, msg: friendlyError(e)}; }
   }
@@ -3774,12 +3819,12 @@ const CloudSync = (function(){
   return {
     isConnected: ()=>connected,
     getLastSyncAt: ()=>lastSyncAt,
-    pushCollection, createPharmacy, connectExisting, signInAndStartSync, createLinkedUser, revokeUserAccess, disconnect,
+    pushCollection, createPharmacy, connectExisting, signInAndStartSync, createLinkedUser, revokeUserAccess, updateUserRole, disconnect,
     loadDirtyFlags,
     hasUnsyncedChanges: ()=>Object.keys(dirtyCollections).length>0,
     uploadBackup, listBackups, downloadBackup,
     recordCloudLogin, startLoginAlerts, stopLoginAlerts, listRecentLogins,
-    pushRecords, deleteRecords, loadSyncedRecordIds,
+    pushRecords, deleteRecords, updateRecords, loadSyncedRecordIds,
     recordAudit, listAudit,
     resumeSession, waitForAuth,
     headOfficeLogin, headOfficeLogout, headOfficeConnect, headOfficeDisconnect,
@@ -3836,7 +3881,7 @@ function hoInventoryValue(branchId){
   return hoData.items.reduce((s,it)=> s + (branchId ? hoBranchStock(it,branchId) : hoTotalStock(it)) * (it.buyPrice||0), 0);
 }
 function hoBranchSalesMetrics(branchId, from, to){
-  const sales = hoData.transactions.filter(t=>(t.type==='sale'||t.type==='return')
+  const sales = hoData.transactions.filter(t=>(t.type==='sale'||t.type==='return') && !t.voided
     && (t.date||'').slice(0,10)>=from && (t.date||'').slice(0,10)<=to && hoBelongsTo(t, branchId));
   const revenue = sales.reduce((s,t)=>s+(t.total||0),0);
   const cost = sales.reduce((s,t)=>s+hoTxCost(t),0);
@@ -3860,9 +3905,9 @@ function hoSplitProportions(saleId){
   return rec.splits.map(s=>({method:s.method, customerId:s.customerId, ratio:s.amount/total}));
 }
 function hoCustomerCreditTransactions(customerId){
-  const legacy = hoData.transactions.filter(t=>(t.type==='sale'||t.type==='return') && t.paymentMethod==='credit' && t.customerId===customerId);
+  const legacy = hoData.transactions.filter(t=>(t.type==='sale'||t.type==='return') && !t.voided && t.paymentMethod==='credit' && t.customerId===customerId);
   const splitShares = [];
-  hoData.transactions.filter(t=>(t.type==='sale'||t.type==='return') && t.paymentMethod==='split').forEach(t=>{
+  hoData.transactions.filter(t=>(t.type==='sale'||t.type==='return') && !t.voided && t.paymentMethod==='split').forEach(t=>{
     const props = hoSplitProportions(t.originalSaleId || t.saleId);
     if(!props) return;
     const mine = props.find(p=>p.method==='credit' && p.customerId===customerId);
@@ -5268,7 +5313,7 @@ function addToCartSmart(query, directItem){
     line.qty += 1;
   } else {
     const bonusLabel = itemBonus(it) > 0 ? ' 🎁 بونص' : '';
-    cart.push({itemId:it.id, name:it.name + bonusLabel, unitPrice:it.sellPrice, buyPrice:it.buyPrice, qty:1, maxQty:itemStock(it)});
+    cart.push({itemId:it.id, name:it.name + bonusLabel, unitPrice:it.sellPrice, buyPrice:it.buyPrice, taxRate:it.taxRate||0, qty:1, maxQty:itemStock(it)});
   }
   renderCart();
 }
@@ -5625,7 +5670,7 @@ async function executeCheckout(shouldPrint){
     if(bonusUsed>0){
       transactions.push({
         id:uid(), saleId, type:'sale', itemId:it.id, itemName:it.name,
-        quantity:bonusUsed, unitPrice:l.unitPrice, buyPriceAtSale:0,
+        quantity:bonusUsed, unitPrice:l.unitPrice, buyPriceAtSale:0, taxRate: it.taxRate||0,
         total:bonusUsed*l.unitPrice*ratio, date:new Date().toISOString(), soldBy: currentUser.username,
         paymentMethod, customerId: customerId||undefined, branchId: currentBranchId()
       });
@@ -5634,12 +5679,12 @@ async function executeCheckout(shouldPrint){
     if(paidQty>0){
       transactions.push({
         id:uid(), saleId, type:'sale', itemId:it.id, itemName:it.name,
-        quantity:paidQty, unitPrice:l.unitPrice, buyPriceAtSale:l.buyPrice,
+        quantity:paidQty, unitPrice:l.unitPrice, buyPriceAtSale:l.buyPrice, taxRate: it.taxRate||0,
         total:paidQty*l.unitPrice*ratio, date:new Date().toISOString(), soldBy: currentUser.username,
         paymentMethod, customerId: customerId||undefined, branchId: currentBranchId()
       });
     }
-    printLines.push({ name:l.name, qty:l.qty, unitPrice:l.unitPrice, lineTotal: lineTotalFull });
+    printLines.push({ name:l.name, qty:l.qty, unitPrice:l.unitPrice, lineTotal: lineTotalFull, taxRate: it.taxRate||0 });
   });
   await saveItems(); await saveTransactions(); await saveSettings();
 
@@ -5727,6 +5772,26 @@ function buildInvoiceHTML(lines, saleId, subtotal, disc, cfg){
     <tbody>${lines.map(l=>`<tr><td>${esc(l.name)}</td><td>${ar(l.qty)}</td><td>${fmt(l.unitPrice)}</td><td>${fmt(l.lineTotal!==undefined?l.lineTotal:l.qty*l.unitPrice)}</td></tr>`).join('')}</tbody></table>
     ${hasDiscount && showDiscountDetails ? `<div style="display:flex; justify-content:space-between; font-size:.92em; margin-top:8px;"><span>الإجمالي قبل الخصم</span><span>${fmt(subtotal)} ${curr}</span></div>
     <div style="display:flex; justify-content:space-between; font-size:.92em;"><span>الخصم</span><span>-${fmt(disc.amount)} ${curr}</span></div>` : ''}
+    ${(()=>{
+      // VAT is tax-INCLUSIVE and PER-ITEM: the price the customer pays
+      // (finalTotal) never changes — only how it's broken down on the
+      // printed invoice into net + tax, using each LINE's own rate (set
+      // per item in inventory, default 0%). A line with no taxRate stored
+      // (older data) is treated as 0%. Discount is spread proportionally
+      // across lines already (see `ratio` in executeCheckout), so backing
+      // out tax from each line's post-discount lineTotal stays consistent
+      // with the printed grand total.
+      let netSum = 0, taxSum = 0;
+      lines.forEach(l=>{
+        const lineTotal = l.lineTotal!==undefined ? l.lineTotal : l.qty*l.unitPrice;
+        const rate = Math.max(0, Number(l.taxRate)||0);
+        const net = rate>0 ? lineTotal/(1+rate/100) : lineTotal;
+        netSum += net; taxSum += (lineTotal-net);
+      });
+      netSum = +netSum.toFixed(2); taxSum = +taxSum.toFixed(2);
+      return `<div style="display:flex; justify-content:space-between; font-size:.92em; margin-top:8px;"><span>الإجمالي غير شامل الضريبة</span><span>${fmt(netSum)} ${curr}</span></div>
+      <div style="display:flex; justify-content:space-between; font-size:.92em;"><span>ضريبة القيمة المضافة</span><span>${fmt(taxSum)} ${curr}</span></div>`;
+    })()}
     <div class="grand">الإجمالي: ${fmt(finalTotal)} ${curr}</div>
     ${cfg.invoiceFooterMessage ? `<div class="footer-msg">${esc(cfg.invoiceFooterMessage)}</div>` : ''}
   </div>`;
@@ -6072,7 +6137,7 @@ function returnLineKey(itemId, buyPrice){
 function lookupSaleForReturn(){
   const saleId = document.getElementById('returnOriginalSaleId').value.trim();
   if(!saleId){ showToast('اكتب رقم الفاتورة الأصلية أولاً'); return; }
-  const soldLines = transactions.filter(t=>t.saleId===saleId && t.type==='sale');
+  const soldLines = transactions.filter(t=>t.saleId===saleId && t.type==='sale' && !t.voided);
   if(soldLines.length===0){ showToast('لم يتم العثور على فاتورة بيع بهذا الرقم'); return; }
 
   const alreadyReturned = {};
@@ -6095,7 +6160,7 @@ function lookupSaleForReturn(){
     const paidUnitPrice = t.quantity>0 ? +(t.total/t.quantity).toFixed(2) : t.unitPrice;
     const existing = returnCart.find(l=>l.key===key);
     if(existing){ existing.maxQty = maxQty; existing.qty = Math.min(existing.qty, maxQty); existing.maxUnitPrice = paidUnitPrice; }
-    else { returnCart.push({ key, itemId:t.itemId, name:t.itemName, unitPrice:paidUnitPrice, maxUnitPrice:paidUnitPrice, buyPrice:t.buyPriceAtSale, qty:maxQty, maxQty,
+    else { returnCart.push({ key, itemId:t.itemId, name:t.itemName, unitPrice:paidUnitPrice, maxUnitPrice:paidUnitPrice, buyPrice:t.buyPriceAtSale, taxRate:t.taxRate||0, qty:maxQty, maxQty,
       paymentMethod: t.paymentMethod, customerId: t.customerId }); }
   });
   if(!addedAny){ showToast('كل أصناف هذه الفاتورة تم إرجاعها بالكامل من قبل'); }
@@ -6118,7 +6183,7 @@ function addToReturnCartSmart(query, directItem){
   const key = returnLineKey(it.id, it.buyPrice);
   const line = returnCart.find(l=>l.key===key);
   if(line){ if(!line.maxQty || line.qty+1<=line.maxQty) line.qty += 1; else showToast('تجاوزت الكمية المسموح بإرجاعها من الفاتورة الأصلية'); }
-  else { returnCart.push({ key, itemId:it.id, name:it.name, unitPrice:it.sellPrice, buyPrice:it.buyPrice, qty:1 }); }
+  else { returnCart.push({ key, itemId:it.id, name:it.name, unitPrice:it.sellPrice, buyPrice:it.buyPrice, taxRate:it.taxRate||0, qty:1 }); }
   renderReturnCart();
 }
 
@@ -6209,7 +6274,7 @@ async function performReturnSubmit(originalSaleId){
     }
     transactions.push({
       id: uid(), saleId: returnId, type:'return', itemId:l.itemId, itemName:l.name,
-      quantity: l.qty, unitPrice: l.unitPrice, buyPriceAtSale: l.buyPrice,
+      quantity: l.qty, unitPrice: l.unitPrice, buyPriceAtSale: l.buyPrice, taxRate: l.taxRate||0,
       total: -(l.qty*l.unitPrice), date: new Date().toISOString(),
       processedBy: currentUser.username, originalSaleId: originalSaleId,
       paymentMethod: l.paymentMethod, customerId: l.customerId, branchId: currentBranchId()
@@ -6267,12 +6332,14 @@ function deleteReturnInvoice(saleId){
         }
       }
     });
-    // Remove the same records from the cloud, otherwise the live listener
-    // re-adds them from the remote copy and the deletion undoes itself.
-    const __removedIds = transactions.filter(t=>(t.saleId===saleId && t.type==='return')).map(t=>t.id);
-    transactions = transactions.filter(t=>!(t.saleId===saleId && t.type==='return'));
+    // BUG FIX: same as performInvoiceDeletion — voiding instead of hard-
+    // deleting keeps the accounting record and matches the security rule
+    // that denies deleting a transaction outright.
+    const affected = transactions.filter(t=>(t.saleId===saleId && t.type==='return' && !t.voided));
+    const voidedAt = new Date().toISOString();
+    affected.forEach(t=>{ t.voided = true; t.voidedAt = voidedAt; t.voidedBy = currentUser.username; });
     if(window.CloudSync){
-      CloudSync.deleteRecords('transactions', __removedIds);
+      CloudSync.updateRecords('transactions', affected);
       CloudSync.recordAudit('حذف فاتورة إرجاع', 'رقم: '+saleId);
     }
     await saveItems(); await saveTransactions();
@@ -6284,7 +6351,7 @@ function deleteReturnInvoice(saleId){
 // Today Invoices Panel & Editing
 function renderTodayInvoicesPanel(){
   const today = todayISO();
-  const todaySales = transactions.filter(t=>t.type==='sale' && localDateOf(t.date)===today && belongsToCurrentBranch(t));
+  const todaySales = transactions.filter(t=>t.type==='sale' && !t.voided && localDateOf(t.date)===today && belongsToCurrentBranch(t));
   const grouped = {};
   todaySales.forEach(t=>{
     if(!grouped[t.saleId]) grouped[t.saleId] = { saleId:t.saleId, items:[], total:0, cost:0, date:t.date, soldBy:t.soldBy };
@@ -6326,13 +6393,13 @@ function renderTodayInvoicesPanel(){
 
 function openEditInvoiceModal(saleId){
   if(!hasPerm('deleteInvoice')){ showToast('ليس لديك صلاحية تعديل الفواتير'); return; }
-  const invTx = transactions.filter(t=>t.saleId===saleId);
+  const invTx = transactions.filter(t=>t.saleId===saleId && !t.voided);
   if(invTx.length===0) return;
   if(isDateLocked(invTx[0].date, invTx[0].branchId)){ showToast(lockedDateMessage(invTx[0].branchId)); return; }
 
   document.getElementById('editInvSaleId').value = saleId;
   document.getElementById('editInvTitle').textContent = 'تعديل فاتورة ' + saleId;
-  editingInvoiceLines = invTx.map(t=>({ id:t.id, itemId:t.itemId, name:t.itemName, unitPrice:t.unitPrice, buyPriceAtSale:t.buyPriceAtSale, qty:t.quantity, origQty:t.quantity }));
+  editingInvoiceLines = invTx.map(t=>({ id:t.id, itemId:t.itemId, name:t.itemName, unitPrice:t.unitPrice, buyPriceAtSale:t.buyPriceAtSale, taxRate:t.taxRate||0, qty:t.quantity, origQty:t.quantity }));
   // Stock changes made while editing this invoice must apply to the branch
   // the sale actually happened in — not whichever branch the person doing
   // the editing happens to be logged into right now.
@@ -6537,7 +6604,7 @@ function addItemToEditingInvoice(){
 // back the FULL originally-sold quantity regardless of any returns already
 // on record.
 function revertSaleTransactionsToStock(saleId){
-  const oldTx = transactions.filter(t=>t.saleId===saleId && t.type==='sale');
+  const oldTx = transactions.filter(t=>t.saleId===saleId && t.type==='sale' && !t.voided);
 
   const alreadyReturned = {};
   transactions.filter(t=>t.type==='return' && t.originalSaleId===saleId).forEach(t=>{
@@ -6618,11 +6685,25 @@ async function saveInvoiceEdits(){
   // already returned against this invoice.
   revertSaleTransactionsToStock(saleId);
 
-  // Remove old transactions
-  const __removedIds = transactions.filter(t=>(t.saleId===saleId && t.type==='sale')).map(t=>t.id);
-  transactions = transactions.filter(t=>!(t.saleId===saleId && t.type==='sale'));
+  // BUG FIX: editing an invoice used to hard-delete its old transaction
+  // lines and push new ones — but the security rules now deny deleting a
+  // transaction outright, so this would leave the OLD lines stuck in the
+  // cloud forever (permanently desynced from local) the moment cloud sync
+  // is enabled. Voiding the old lines (kept for history, excluded from
+  // every report/total the same as an invoice delete) and creating fresh
+  // ones for the new content works within the rules and keeps a trail of
+  // what an invoice looked like before it was edited.
+  const oldIds = transactions.filter(t=>(t.saleId===saleId && t.type==='sale')).map(t=>t.id);
+  const editedAt = new Date().toISOString();
+  const voidedOldTx = [];
+  transactions.forEach(t=>{
+    if(t.saleId===saleId && t.type==='sale'){
+      t.voided = true; t.voidedAt = editedAt; t.voidedBy = currentUser.username; t.voidReason = 'تعديل الفاتورة';
+      voidedOldTx.push(t);
+    }
+  });
   if(window.CloudSync){
-    CloudSync.deleteRecords('transactions', __removedIds);
+    CloudSync.updateRecords('transactions', voidedOldTx);
     CloudSync.recordAudit('تعديل فاتورة', 'رقم: '+saleId);
   }
 
@@ -6647,7 +6728,7 @@ async function saveInvoiceEdits(){
     if(bonusUsed>0){
       transactions.push({
         id:uid(), saleId, type:'sale', itemId:l.itemId, itemName:l.name,
-        quantity:bonusUsed, unitPrice:l.unitPrice, buyPriceAtSale:0,
+        quantity:bonusUsed, unitPrice:l.unitPrice, buyPriceAtSale:0, taxRate: l.taxRate ?? (item?item.taxRate:0) ?? 0,
         total:bonusUsed*l.unitPrice*ratio, date:originalDate, soldBy: originalSoldBy,
         editedBy: currentUser.username, editedAt: new Date().toISOString(), branchId: editingInvoiceBranchId
       });
@@ -6656,7 +6737,7 @@ async function saveInvoiceEdits(){
     if(paidQty>0){
       transactions.push({
         id:uid(), saleId, type:'sale', itemId:l.itemId, itemName:l.name,
-        quantity:paidQty, unitPrice:l.unitPrice, buyPriceAtSale:l.buyPriceAtSale||(item?item.buyPrice:0),
+        quantity:paidQty, unitPrice:l.unitPrice, buyPriceAtSale:l.buyPriceAtSale||(item?item.buyPrice:0), taxRate: l.taxRate ?? (item?item.taxRate:0) ?? 0,
         total:paidQty*l.unitPrice*ratio, date:originalDate, soldBy: originalSoldBy,
         editedBy: currentUser.username, editedAt: new Date().toISOString(), branchId: editingInvoiceBranchId
       });
@@ -6768,10 +6849,20 @@ async function performInvoiceDeletion(saleId){
   // revertSaleTransactionsToStock for why we can't just add back the full
   // originally-sold quantity.
   revertSaleTransactionsToStock(saleId);
-  const __removedIds = transactions.filter(t=>t.saleId===saleId).map(t=>t.id);
-  transactions = transactions.filter(t=>t.saleId!==saleId);
+  // BUG FIX (accounting + Firestore rules): this used to actually remove
+  // the transaction records (transactions.filter(t=>t.saleId!==saleId)),
+  // which (a) destroys the accounting trail — a deleted invoice leaves no
+  // record it ever existed, even in the audit log's own description, and
+  // (b) directly conflicts with the security rules, which now deny
+  // deleting a transaction outright on purpose. Voiding keeps the record
+  // (so reports/exports can still show "ملغاة" history) while every
+  // revenue/profit/credit/commission calculation elsewhere now skips
+  // anything with voided:true.
+  const affected = transactions.filter(t=>t.saleId===saleId && !t.voided);
+  const voidedAt = new Date().toISOString();
+  affected.forEach(t=>{ t.voided = true; t.voidedAt = voidedAt; t.voidedBy = currentUser.username; });
   if(window.CloudSync){
-    CloudSync.deleteRecords('transactions', __removedIds);
+    CloudSync.updateRecords('transactions', affected);
     CloudSync.recordAudit('حذف فاتورة بيع', 'رقم: '+saleId);
   }
   settings.invoiceDeletePin = generateInvoiceDeletePin();
@@ -6787,7 +6878,7 @@ function deleteInvoiceById(saleId){
   // Branch managers can edit operationally but cannot erase the accounting record.
   if(!currentUser || currentUser.role!=='manager'){ showToast('الحذف النهائي للفواتير متاح لمدير الصيدلية فقط'); return; }
   if(!hasPerm('deleteInvoice')){ showToast('ليس لديك صلاحية حذف الفواتير'); return; }
-  const tx = transactions.filter(t=>t.saleId===saleId)[0];
+  const tx = transactions.filter(t=>t.saleId===saleId && !t.voided)[0];
   if(tx && isDateLocked(tx.date, tx.branchId)){ showToast(lockedDateMessage(tx.branchId)); return; }
   requireInvoiceDeleteAuthorization(async ()=>{
     if(!(await showConfirm('هل أنت متأكد من حذف الفاتورة بالكامل؟ سيتم استرجاع الأصناف لمخزون الصيدلية.'))) return;
@@ -6808,7 +6899,7 @@ function renderPastInvoices(){
   const today = todayISO();
 
   // Dashboard Stats Calculation for Today (net of returns)
-  const todayTx = transactions.filter(t=>(t.type==='sale'||t.type==='return') && localDateOf(t.date)===today && belongsToCurrentBranch(t));
+  const todayTx = transactions.filter(t=>(t.type==='sale'||t.type==='return') && !t.voided && localDateOf(t.date)===today && belongsToCurrentBranch(t));
   const todayRevenue = todayTx.reduce((s,t)=>s+t.total,0);
   const todayProfit = todayTx.reduce((s,t)=>s+txProfit(t),0);
   
@@ -6848,13 +6939,24 @@ function renderPastInvoices(){
 
   const grouped = {};
   sales.forEach(t=>{
-    if(!grouped[t.saleId]) grouped[t.saleId] = { saleId:t.saleId, items:[], total:0, cost:0, date:t.date, soldBy:t.soldBy };
+    if(!grouped[t.saleId]) grouped[t.saleId] = { saleId:t.saleId, items:[], total:0, cost:0, date:t.date, soldBy:t.soldBy, hasActive:false };
+    // BUG FIX: an EDITED invoice now has its old (voided) lines still
+    // sitting in `transactions` alongside the new (active) ones under the
+    // same saleId — grouping them together would double the shown total.
+    // Once we know a saleId has at least one active line, drop any voided
+    // leftovers already collected for it and ignore further voided ones;
+    // only if EVERY line for a saleId is voided (a fully deleted invoice)
+    // do we keep them, so it still shows up — marked ملغاة — for the audit trail.
+    if(t.voided && grouped[t.saleId].hasActive) return;
+    if(!t.voided && !grouped[t.saleId].hasActive){
+      grouped[t.saleId] = { saleId:t.saleId, items:[], total:0, cost:0, date:t.date, soldBy:t.soldBy, hasActive:true };
+    }
     grouped[t.saleId].items.push(t);
     grouped[t.saleId].total += t.total;
     grouped[t.saleId].cost += (t.buyPriceAtSale||0) * t.quantity;
   });
 
-  const list = Object.values(grouped).reverse();
+  const list = Object.values(grouped).map(inv=>({...inv, voided: !inv.hasActive})).reverse();
   const tbody = document.getElementById('pastInvoicesTable');
   if(list.length===0){ tbody.innerHTML = `<tr><td colspan="7" class="empty-note" style="text-align:center; padding:20px;">لا توجد فواتير تطابق الفترة المحددة</td></tr>`; return; }
 
@@ -6870,22 +6972,24 @@ function renderPastInvoices(){
   tbody.innerHTML = shownInvoices.map(inv=>{
     const margin = inv.total - inv.cost;
     const canSeeProfit = hasPerm('seeCosts');
+    const voidedBadge = inv.voided ? ' <span style="color:var(--danger,#c0392b); font-weight:bold;">(ملغاة)</span>' : '';
+    const actions = inv.voided
+      ? `<div class="row-actions"><button class="icon-btn" onclick="reprintInvoice('${inv.saleId}')">طباعة</button></div>`
+      : `<div class="row-actions">
+          <button class="icon-btn" onclick="reprintInvoice('${inv.saleId}')">طباعة</button>
+          <button class="icon-btn" onclick="openEditInvoiceModal('${inv.saleId}')">تعديل</button>
+          <button class="icon-btn" onclick="openReturnModal('${inv.saleId}')">↩️ إرجاع</button>
+          <button class="icon-btn del" onclick="deleteInvoiceById('${inv.saleId}')">حذف</button>
+        </div>`;
     return `
-    <tr>
-      <td class="item-name">${inv.saleId}</td>
+    <tr${inv.voided ? ' style="opacity:.6;"' : ''}>
+      <td class="item-name">${inv.saleId}${voidedBadge}</td>
       <td>${new Date(inv.date).toLocaleString('ar-EG-u-nu-latn')}</td>
       <td>${inv.soldBy||'—'}</td>
       <td class="num">${ar(inv.items.length)}</td>
       <td class="num">${fmt(inv.total)} ${currHTML()}</td>
       <td class="num" style="color:var(--teal-800); font-weight:bold; ${canSeeProfit?'':'display:none;'}">${canSeeProfit ? fmt(margin)+' '+currHTML() : ''}</td>
-      <td>
-        <div class="row-actions">
-          <button class="icon-btn" onclick="reprintInvoice('${inv.saleId}')">طباعة</button>
-          <button class="icon-btn" onclick="openEditInvoiceModal('${inv.saleId}')">تعديل</button>
-          <button class="icon-btn" onclick="openReturnModal('${inv.saleId}')">↩️ إرجاع</button>
-          <button class="icon-btn del" onclick="deleteInvoiceById('${inv.saleId}')">حذف</button>
-        </div>
-      </td>
+      <td>${actions}</td>
     </tr>
   `}).join('') + (hiddenInvoices>0
     ? `<tr><td colspan="7" class="empty-note" style="text-align:center; padding:14px;">يتم عرض أحدث ${ar(INVOICES_RENDER_LIMIT)} فاتورة من إجمالي ${ar(totalInvoices)} — ضيّق نطاق التاريخ بالأعلى للوصول لفواتير أقدم، والتصدير يشمل كل الفواتير المفلترة</td></tr>`
@@ -7013,12 +7117,12 @@ function exportPastInvoicesPDF(){
 }
 
 function reprintInvoice(saleId){
-  const txs = transactions.filter(t=>t.saleId===saleId);
+  const txs = transactions.filter(t=>t.saleId===saleId && !t.voided);
   if(txs.length===0) return;
   // Reconstruct the original discount from the stored (already discounted)
   // line totals — otherwise a reprint of a discounted invoice showed the
   // full pre-discount price instead of what the customer actually paid.
-  const lines = txs.map(t=>({ name:t.itemName, qty:t.quantity, unitPrice:t.unitPrice, lineTotal:t.total }));
+  const lines = txs.map(t=>({ name:t.itemName, qty:t.quantity, unitPrice:t.unitPrice, lineTotal:t.total, taxRate:t.taxRate||0 }));
   const subtotal = txs.reduce((s,t)=>s+t.quantity*t.unitPrice, 0);
   const actualTotal = txs.reduce((s,t)=>s+t.total, 0);
   const discAmount = Math.max(0, +(subtotal-actualTotal).toFixed(2));
@@ -7078,6 +7182,7 @@ function openItemModal(id){
     document.getElementById('itemRegistrationStatus').value = it.registrationStatus||'مسجل';
     document.getElementById('itemBuyPrice').value = it.buyPrice;
     document.getElementById('itemSellPrice').value = it.sellPrice;
+    document.getElementById('itemTaxRate').value = it.taxRate ?? 0;
     document.getElementById('itemQty').value = itemStock(it)||0;
     document.getElementById('itemWarehouseQty').value = it.warehouseQuantity||0;
     document.getElementById('itemMinStock').value = it.minStock;
@@ -7086,6 +7191,7 @@ function openItemModal(id){
   } else {
     document.getElementById('itemModalOverlay').classList.add('active');
     ['itemId','itemName','itemCategory','itemBuyPrice','itemSellPrice','itemExpiry'].forEach(id=>document.getElementById(id).value='');
+    document.getElementById('itemTaxRate').value = 0;
     document.getElementById('itemModalTitle').textContent = 'إضافة صنف جديد';
     document.getElementById('itemTypeSelect').value = 'سائل';
     onItemTypeChange();
@@ -7116,6 +7222,7 @@ async function saveItem(){
     registrationStatus: document.getElementById('itemRegistrationStatus').value,
     buyPrice: Math.max(0, parseFloat(document.getElementById('itemBuyPrice').value)||0),
     sellPrice: Math.max(0, parseFloat(document.getElementById('itemSellPrice').value)||0),
+    taxRate: Math.min(100, Math.max(0, parseFloat(document.getElementById('itemTaxRate').value)||0)),
     warehouseQuantity: Math.max(0, parseInt(document.getElementById('itemWarehouseQty').value)||0),
     minStock: Math.max(0, parseInt(document.getElementById('itemMinStock').value)||0),
     expiry: expiry,
@@ -8023,6 +8130,7 @@ function computeAnomalies(){
   // --- selling below cost (should be blocked, so any hit is worth seeing) ---
   const belowCost = transactions.filter(t=>{
     if(t.type !== 'sale') return false;
+    if(t.voided) return false;
     if(!belongsToCurrentBranch(t)) return false;
     const ts = new Date(t.date).getTime();
     if(now - ts > 30*86400000) return false;
@@ -8176,9 +8284,17 @@ function renderDoctorBonusCommissionPanel(selectedMonth){
   const salesPayable=targetMet ? Math.max(0, Number(d.salesCommission||0)-salesPaid) : 0;
   const salesRate=Math.min(100, Math.max(0, Number(settings.doctorSalesCommissionPct ?? 1)||0));
   const salesRateEl=document.getElementById('doctorSalesCommissionPctSetting');
-  if(salesRateEl){ salesRateEl.value=salesRate; salesRateEl.disabled=!isManager; }
+  // BUG FIX: the 3-second auto-refresh timer (startDoctorBonusAutoRefresh)
+  // was blindly overwriting this field's value on every tick — so if
+  // typing a new rate/target took longer than 3 seconds, it would get
+  // wiped back to the old saved value before you could click "حفظ",
+  // looking like the number resets itself. Now skipped while the field
+  // has focus (mid-edit).
+  if(salesRateEl && document.activeElement!==salesRateEl){ salesRateEl.value=salesRate; salesRateEl.disabled=!isManager; }
+  else if(salesRateEl){ salesRateEl.disabled=!isManager; }
   const targetEl=document.getElementById('doctorSalesCommissionTarget');
-  if(targetEl){ targetEl.value=target; targetEl.disabled=!isManager; }
+  if(targetEl && document.activeElement!==targetEl){ targetEl.value=target; targetEl.disabled=!isManager; }
+  else if(targetEl){ targetEl.disabled=!isManager; }
   ['saveDoctorRatesBtn','saveDoctorTargetBtn'].forEach(id=>{const el=document.getElementById(id);if(el)el.style.display=isManager?'':'none';});
   const curr=currHTML();
   const set=(id,text)=>{const el=document.getElementById(id);if(el)el.innerHTML=text;};
@@ -8257,6 +8373,14 @@ function renderDoctorExternalDoctorManager(){
   const names=doctorProfileNames();
   renderServiceDoctorSelect(selectedServiceDoctorName());
   if(!box) return;
+  // BUG FIX: same auto-refresh timer issue as the sales target field, but
+  // worse here — this table is rebuilt from scratch (innerHTML) every 3
+  // seconds while the doctor-commissions view is open, which destroys and
+  // recreates the name/rate <input> elements entirely, wiping out
+  // whatever you were mid-typing (and dropping focus) even faster than a
+  // plain value reset would. Skipped entirely while any input inside it
+  // currently has focus.
+  if(box.contains(document.activeElement)) return;
   const isManager = currentUser && currentUser.role==='manager';
   if(!isManager){ box.innerHTML='<div class="empty-note">إدارة أسماء ونسب الأطباء متاحة للمدير فقط.</div>'; return; }
   box.innerHTML=`<table><thead><tr><th>اسم الدكتور</th><th>النسبة الافتراضية للأعمال الجديدة</th><th></th></tr></thead><tbody>${names.map(name=>{
@@ -8383,8 +8507,15 @@ async function saveExpense(){
   const date = document.getElementById('expenseDate').value || todayISO();
   const note = document.getElementById('expenseNote').value.trim();
   const id = document.getElementById('expenseId').value;
+  const targetBranchId = id ? (expenses.find(x=>x.id===id)?.branchId) : currentBranchId();
+  // BUG FIX: expenses had no accounting period-lock check at all — a
+  // closed day's register total could be silently invalidated by editing
+  // or backdating an expense into it afterward. Reuses the same
+  // isDateLocked()/lockedDateMessage() already used for invoices.
+  if(isDateLocked(date, targetBranchId)){ showToast(lockedDateMessage(targetBranchId)); return; }
   if(id){
     const e = expenses.find(x=>x.id===id);
+    if(e && isDateLocked(e.date, e.branchId)){ showToast(lockedDateMessage(e.branchId)); return; }
     if(e){ e.category=category; e.amount=amount; e.method=method; e.date=date+'T12:00:00.000Z'; e.note=note; }
   } else {
     expenses.push({id:uid(), category, amount, method, date:date+'T12:00:00.000Z', note, by: currentUser.username, branchId: currentBranchId()});
@@ -8397,8 +8528,9 @@ async function saveExpense(){
   showToast('تم حفظ المصروف');
 }
 async function deleteExpense(id){
-  if(!(await showConfirm('حذف هذا المصروف؟'))) return;
   const e = expenses.find(x=>x.id===id);
+  if(e && isDateLocked(e.date, e.branchId)){ showToast(lockedDateMessage(e.branchId)); return; }
+  if(!(await showConfirm('حذف هذا المصروف؟'))) return;
   expenses = expenses.filter(x=>x.id!==id);
   saveExpenses().then(()=>{
     if(window.CloudSync && e) CloudSync.recordAudit('حذف مصروف', `${e.category} — ${fmt(e.amount)}`);
@@ -8427,7 +8559,7 @@ function computeClosingBreakdown(dateISO, branchId){
   const bId = branchId !== undefined ? branchId : currentBranchId();
   const belongsToBranch = t => bId ? (t.branchId||null)===bId : true;
 
-  const saleTx = transactions.filter(t=>(t.type==='sale'||t.type==='return') && inRange(t.date) && belongsToBranch(t));
+  const saleTx = transactions.filter(t=>(t.type==='sale'||t.type==='return') && !t.voided && inRange(t.date) && belongsToBranch(t));
   // Split-payment-aware: distributePaymentMethods correctly unpacks any
   // 'split'-tagged sale/return into its cash/card/transfer/credit shares.
   const buckets = distributePaymentMethods(saleTx);
@@ -8814,6 +8946,10 @@ async function saveService(){
   const id = document.getElementById('serviceId').value;
   if(id){
     const s = externalServices.find(x=>x.id===id);
+    // BUG FIX: editing an external work record had no accounting
+    // period-lock check — could silently change a doctor's commission
+    // total for an already-closed and paid-out period.
+    if(s && isDateLocked(s.date, s.branchId)){ showToast(lockedDateMessage(s.branchId)); return; }
     if(s){
       s.serviceType=serviceType; s.doctorName=doctorName; s.doctorCommissionPct=doctorCommissionPct; s.description=description; s.amount=amount;
       s.pharmacyCost=pharmacyCost; s.otherCost=otherCost;
@@ -8846,8 +8982,9 @@ async function saveService(){
   showToast('تم حفظ العملية وتحديث بونص العمل الخارجي تلقائيًا');
 }
 async function deleteService(id){
-  if(!(await showConfirm('حذف هذا السجل؟'))) return;
   const s = externalServices.find(x=>x.id===id);
+  if(s && isDateLocked(s.date, s.branchId)){ showToast(lockedDateMessage(s.branchId)); return; }
+  if(!(await showConfirm('حذف هذا السجل؟'))) return;
   externalServices = externalServices.filter(x=>x.id!==id);
   saveExternalServices().then(()=>{
     if(window.CloudSync && s) CloudSync.recordAudit('حذف عمل خارجي/كشف', `${s.serviceType} — ${fmt(s.amount)}`);
@@ -9250,7 +9387,7 @@ function doctorCommissionForPeriod(from, to, branchId){
   // transfer, etc.) for sales and external work. Returns reduce the
   // commission exactly like they reduce the collected sale value.
   let salesCashCollected = 0;
-  transactions.filter(t=>(t.type==='sale'||t.type==='return') && inRange(t.date) && belongs(t)).forEach(t=>{
+  transactions.filter(t=>(t.type==='sale'||t.type==='return') && !t.voided && inRange(t.date) && belongs(t)).forEach(t=>{
     salesCashCollected += immediateCollectedAmountForTransaction(t);
   });
   const externalCashCollected = externalServices.filter(s=>inRange(s.date) && (s.paymentMethod||'cash')!=='credit' && belongs(s))
@@ -9270,10 +9407,10 @@ function doctorCommissionForPeriod(from, to, branchId){
     if(!customerId || Math.abs(amount)<0.009) return;
     (chargesByCustomer[customerId] ||= []).push({date, amount:Number(amount), remaining:Number(amount), type, branchId:branch||null, sourceId, doctorName:doctorName||null, doctorRate:doctorRate==null?null:Number(doctorRate)});
   }
-  transactions.filter(t=>(t.type==='sale'||t.type==='return') && t.paymentMethod==='credit' && t.customerId).forEach(t=>{
+  transactions.filter(t=>(t.type==='sale'||t.type==='return') && !t.voided && t.paymentMethod==='credit' && t.customerId).forEach(t=>{
     addCharge(t.customerId, t.date, Number(t.total)||0, 'sale', t.branchId, t.saleId||t.id);
   });
-  transactions.filter(t=>(t.type==='sale'||t.type==='return') && t.paymentMethod==='split').forEach(t=>{
+  transactions.filter(t=>(t.type==='sale'||t.type==='return') && !t.voided && t.paymentMethod==='split').forEach(t=>{
     const props=splitProportions(t.originalSaleId || t.saleId); if(!props) return;
     props.filter(p=>p.method==='credit' && p.customerId).forEach(p=>{
       addCharge(p.customerId, t.date, +((Number(t.total)||0)*p.ratio).toFixed(2), 'sale', t.branchId, t.saleId||t.id);
@@ -9342,8 +9479,8 @@ function doctorCommissionForPeriod(from, to, branchId){
 
 function renderDashboard(){
   const today = todayISO();
-  const todaySales = transactions.filter(t=>t.type==='sale' && localDateOf(t.date)===today && belongsToCurrentBranch(t));
-  const todayTx = transactions.filter(t=>(t.type==='sale'||t.type==='return') && localDateOf(t.date)===today && belongsToCurrentBranch(t));
+  const todaySales = transactions.filter(t=>t.type==='sale' && !t.voided && localDateOf(t.date)===today && belongsToCurrentBranch(t));
+  const todayTx = transactions.filter(t=>(t.type==='sale'||t.type==='return') && !t.voided && localDateOf(t.date)===today && belongsToCurrentBranch(t));
   const todaySaleIds = [...new Set(todaySales.map(t=>t.saleId||t.id))];
   const salesRevenue = todayTx.reduce((s,t)=>s+t.total,0);
   const salesProfit = todayTx.reduce((s,t)=>s+txProfit(t),0);
@@ -9876,11 +10013,11 @@ function distributePaymentMethods(txList){
 function customerCreditTransactions(customerId){
   // Plain (non-split) credit sales/returns — unchanged from before.
   const legacy = transactions.filter(t=>(t.type==='sale'||t.type==='return')
-    && t.paymentMethod==='credit' && t.customerId===customerId);
+    && !t.voided && t.paymentMethod==='credit' && t.customerId===customerId);
   // The credit-attributed share of any split-payment sale/return, scaled by
   // that invoice's own recorded proportions (see splitProportions above).
   const splitShares = [];
-  transactions.filter(t=>(t.type==='sale'||t.type==='return') && t.paymentMethod==='split')
+  transactions.filter(t=>(t.type==='sale'||t.type==='return') && !t.voided && t.paymentMethod==='split')
     .forEach(t=>{
       // Same originalSaleId fix as distributePaymentMethods above — a
       // return's own saleId is a new id, never the one the split was
@@ -10437,6 +10574,7 @@ async function saveUser(){
     const u = users.find(x=>x.id===editId);
     if(!u){ showToast('المستخدم غير موجود'); return; }
     u.username = username;
+    const roleOrBranchChanged = (u.role !== role) || (u.branchId !== branchId);
     u.role = role;
     u.branchId = branchId;
     u.permissions = readUserPermissionsFromForm();
@@ -10447,13 +10585,16 @@ async function saveUser(){
       document.getElementById('curUserName').textContent = currentUser.username;
       document.getElementById('curUserRole').textContent = roleLabel(currentUser.role);
     }
-    // Note: editing a cloud-linked user's role here updates it locally and
-    // in the synced 'users' collection (via saveUsers() above) immediately.
-    // Their individual userDirectory/{uid} entry (used only by security
-    // rules, not by the app itself) isn't updated until phase 2 of cloud
-    // sync, since that requires knowing their Firebase uid, which isn't
-    // stored locally — harmless in the meantime since the rules in place
-    // only check pharmacyId, not role.
+    // BUG FIX: this used to only update the role/branch locally and in the
+    // synced 'users' collection — userDirectory/{uid} (what the Firestore
+    // security rules actually check) was never touched, so a promotion or
+    // demotion here didn't take effect for cloud enforcement until some
+    // future phase-2 sync. Now pushed immediately when it's a cloud-linked
+    // user and something actually changed.
+    if(roleOrBranchChanged && u.cloudUid && window.CloudSync){
+      const res = await CloudSync.updateUserRole(u.cloudUid, u.role, u.branchId);
+      if(!res.ok) showToast('تم الحفظ محليًا، لكن تعذر تحديث الصلاحيات في السحابة: '+res.msg);
+    }
     showToast('تم حفظ تعديلات المستخدم');
   } else {
     if(!password){ showToast('أدخل كلمة المرور'); return; }
@@ -11317,7 +11458,7 @@ function renderReport(){
   if(!range) return;
   const {from, to} = range;
 
-  const sales = transactions.filter(t=>(t.type==='sale'||t.type==='return') && localDateOf(t.date)>=from && localDateOf(t.date)<=to && belongsToCurrentBranch(t));
+  const sales = transactions.filter(t=>(t.type==='sale'||t.type==='return') && !t.voided && localDateOf(t.date)>=from && localDateOf(t.date)<=to && belongsToCurrentBranch(t));
   const usages = usageLogs.filter(u=>{
     if(localDateOf(u.date)<from || localDateOf(u.date)>to) return false;
     const oi = openedItems.find(o=>o.id===u.openedItemId);
@@ -11890,7 +12031,7 @@ function exportReportExcel(){
   const range = getReportDateRange();
   if(!range) return;
   const {from, to} = range;
-  const sales = transactions.filter(t=>(t.type==='sale'||t.type==='return') && localDateOf(t.date)>=from && localDateOf(t.date)<=to && belongsToCurrentBranch(t));
+  const sales = transactions.filter(t=>(t.type==='sale'||t.type==='return') && !t.voided && localDateOf(t.date)>=from && localDateOf(t.date)<=to && belongsToCurrentBranch(t));
   const usages = usageLogs.filter(u=>{
     if(localDateOf(u.date)<from || localDateOf(u.date)>to) return false;
     const oi = openedItems.find(o=>o.id===u.openedItemId);
@@ -11924,7 +12065,7 @@ function exportReportPDF(){
   const range = getReportDateRange();
   if(!range) return;
   const {from, to} = range;
-  const sales = transactions.filter(t=>(t.type==='sale'||t.type==='return') && localDateOf(t.date)>=from && localDateOf(t.date)<=to && belongsToCurrentBranch(t));
+  const sales = transactions.filter(t=>(t.type==='sale'||t.type==='return') && !t.voided && localDateOf(t.date)>=from && localDateOf(t.date)<=to && belongsToCurrentBranch(t));
   const usages = usageLogs.filter(u=>{
     if(localDateOf(u.date)<from || localDateOf(u.date)>to) return false;
     const oi = openedItems.find(o=>o.id===u.openedItemId);
