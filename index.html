@@ -2725,9 +2725,10 @@ const XLSX = (function(){
           </div>
         </div>
 
-        <div style="display: flex; align-items: center; gap: 12px; margin-bottom: 14px;">
-                    <button class="btn small" onclick="saveScheduledReportSettings()" style="padding: 9px 20px; font-weight: 700;">💾 حفظ إعدادات التقرير</button>
+        <div style="display: flex; flex-wrap: wrap; align-items: center; gap: 10px; margin-bottom: 14px;">
+          <button class="btn small" onclick="saveScheduledReportSettings()" style="padding: 9px 20px; font-weight: 700;">💾 حفظ إعدادات التقرير</button>
           <button class="btn ghost small" type="button" onclick="openWhatsAppDailyReport()" style="padding: 9px 18px; font-weight: 700; border-color: #22c55e; color: #22c55e;">📲 إرسال ملخص اليوم إلى واتساب الآن (مباشر)</button>
+          <button class="btn ghost small" type="button" onclick="openEmailDailyReport()" style="padding: 9px 18px; font-weight: 700; border-color: #0284c7; color: #0284c7;">📧 إرسال ملخص اليوم إلى الإيميل الآن (مباشر)</button>
         </div>
 
         <div class="card" style="background: var(--paper); border: 1px solid var(--line); border-radius: 8px; padding: 12px 14px; font-size: 12.5px; line-height: 1.6; color: var(--muted);">
@@ -2796,7 +2797,7 @@ const XLSX = (function(){
             <tr>
               <th>وقت وتاريخ الإرسال</th>
               <th>المستخدم (الكاشير)</th>
-              <th>الرقم المستلم</th>
+              <th>المستلم (الرقم / البريد)</th>
               <th>إجمالي المبيعات</th>
               <th>صافي الربح</th>
               <th>حالة التوثيق</th>
@@ -5636,12 +5637,61 @@ function roleLabel(role){
 // ===== Report Dispatch Permission & Permanent Audit Log =====
 let reportDispatchLogs = [];
 
+function openEmailDailyReport(){
+  const inputEl = document.getElementById('dailyReportEmail');
+  const email = (inputEl ? inputEl.value : (settings.dailyReportEmail || '')).trim();
+  if(!email){
+    showToast('يرجى إدخال البريد الإلكتروني أولاً في الإعدادات');
+    return;
+  }
+
+  const today = todayISO();
+  const txs = transactions.filter(t => (t.type==='sale'||t.type==='return') && !t.voided && localDateOf(t.date)===today && belongsToCurrentBranch(t));
+  const salesRevenue = txs.reduce((s,t)=>s+t.total,0);
+  const salesProfit = txs.reduce((s,t)=>s+txProfit(t),0);
+  const saleIds = new Set(txs.filter(t=>t.type==='sale').map(t=>t.saleId||t.id));
+
+  const lowStock = items.filter(i=>itemStock(i)<=i.minStock);
+  const nearExpiry = items.filter(i=>i.expiry).map(i=>({...i, d:daysUntil(i.expiry)})).filter(i=>i.d!==null && i.d<=settings.expiryWarningDays);
+
+  const cur = currLabel();
+  const subject = `تقرير VET PRO اليومي - ${today}`;
+  let body = `تقرير VET PRO اليومي\n` +
+             `التاريخ: ${today}\n` +
+             `━━━━━━━━━━━━━━━━━━━\n` +
+             `إجمالي المبيعات: ${fmt(salesRevenue)} ${cur}\n` +
+             `صافي الربح: ${fmt(salesProfit)} ${cur}\n` +
+             `عدد الفواتير: ${saleIds.size} فاتورة\n` +
+             `━━━━━━━━━━━━━━━━━━━\n` +
+             `النواقص: ${lowStock.length} صنف\n` +
+             `الصلاحيات القريبة: ${nearExpiry.length} صنف\n` +
+             `━━━━━━━━━━━━━━━━━━━\n` +
+             `تم توليد التقرير بنجاح عبر نظام VET PRO`;
+
+  const mailtoUrl = `mailto:${encodeURIComponent(email)}?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`;
+
+  if(window.require){
+    try {
+      const { shell } = require('electron');
+      shell.openExternal(mailtoUrl);
+      showToast('✅ تم فتح برنامج البريد وبداخله التقرير جاهزًا للإرسال!');
+      return;
+    } catch(e){}
+  }
+  window.open(mailtoUrl, '_blank');
+}
+
 function openCashierReportModal(){
   const modal = document.getElementById('cashierReportModalOverlay');
   if(!modal) return;
   
   const phone = (settings.dailyReportWhatsApp || '').trim() || 'لم يُحدد بعد في الإعدادات';
-  document.getElementById('cashierReportTargetPhoneDisplay').textContent = phone;
+  const email = (settings.dailyReportEmail || '').trim() || 'لم يُحدد بعد في الإعدادات';
+  
+  const phoneEl = document.getElementById('cashierReportTargetPhoneDisplay');
+  if(phoneEl) phoneEl.textContent = phone;
+  const emailEl = document.getElementById('cashierReportTargetEmailDisplay');
+  if(emailEl) emailEl.textContent = email;
 
   const today = todayISO();
   const txs = transactions.filter(t => (t.type==='sale'||t.type==='return') && !t.voided && localDateOf(t.date)===today && belongsToCurrentBranch(t));
@@ -5663,10 +5713,19 @@ function closeCashierReportModal(){
 }
 
 async function dispatchReportByCashier(channel){
-  const targetPhones = (settings.dailyReportWhatsApp || '').trim();
-  if(!targetPhones){
-    showToast('لم يتم تحديد رقم هاتف الإدارة في الإعدادات بعد — تواصل مع المدير لإضافته');
-    return;
+  let recipient = '';
+  if(channel === 'email'){
+    recipient = (settings.dailyReportEmail || '').trim();
+    if(!recipient){
+      showToast('لم يتم تحديد البريد الإلكتروني للإدارة في الإعدادات بعد — تواصل مع المدير لإضافته');
+      return;
+    }
+  } else {
+    recipient = (settings.dailyReportWhatsApp || '').trim();
+    if(!recipient){
+      showToast('لم يتم تحديد رقم هاتف الإدارة في الإعدادات بعد — تواصل مع المدير لإضافته');
+      return;
+    }
   }
 
   const today = todayISO();
@@ -5700,7 +5759,7 @@ async function dispatchReportByCashier(channel){
     username: currentUser.username,
     role: currentUser.role,
     branch: bName,
-    recipients: targetPhones,
+    recipients: recipient,
     channel: channel || 'whatsapp',
     salesTotal: salesRevenue,
     profitTotal: salesProfit,
@@ -5715,20 +5774,35 @@ async function dispatchReportByCashier(channel){
   closeCashierReportModal();
   renderReportDispatchLogsTable();
 
-  const cleanPhone = targetPhones.replace(/[^0-9]/g, '');
-  const url = `https://api.whatsapp.com/send?phone=${cleanPhone}&text=${encodeURIComponent(msg)}`;
-  if(window.require){
-    try {
-      const { shell } = require('electron');
-      shell.openExternal(url);
-    } catch(e){
+  if(channel === 'email'){
+    const subject = `تقرير VET PRO - ${bName} (${today})`;
+    const mailtoUrl = `mailto:${encodeURIComponent(recipient)}?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(msg)}`;
+    if(window.require){
+      try {
+        const { shell } = require('electron');
+        shell.openExternal(mailtoUrl);
+      } catch(e){
+        window.open(mailtoUrl, '_blank');
+      }
+    } else {
+      window.open(mailtoUrl, '_blank');
+    }
+    showToast('✅ تم توثيق إرسال التقرير في السجل الدائم وفتح برنامج البريد بنجاح!');
+  } else {
+    const cleanPhone = recipient.replace(/[^0-9]/g, '');
+    const url = `https://api.whatsapp.com/send?phone=${cleanPhone}&text=${encodeURIComponent(msg)}`;
+    if(window.require){
+      try {
+        const { shell } = require('electron');
+        shell.openExternal(url);
+      } catch(e){
+        window.open(url, '_blank');
+      }
+    } else {
       window.open(url, '_blank');
     }
-  } else {
-    window.open(url, '_blank');
+    showToast('✅ تم توثيق إرسال التقرير في السجل الدائم وفتح محادثة الواتساب بنجاح!');
   }
-
-  showToast('✅ تم توثيق إرسال التقرير في السجل الدائم وفتح محادثة الواتساب بنجاح!');
 }
 
 function renderReportDispatchLogsTable(){
@@ -5738,16 +5812,19 @@ function renderReportDispatchLogsTable(){
     tbody.innerHTML = '<tr><td colspan="6" style="text-align:center; padding:18px; color:var(--muted);">لا توجد تقارير مرسلة مسجلة حتى الآن</td></tr>';
     return;
   }
-  tbody.innerHTML = reportDispatchLogs.map(l => `
-    <tr>
-      <td style="font-weight:700;">${esc(l.displayTime || l.timestamp)}</td>
-      <td><strong>${esc(l.username)}</strong> <span class="badge" style="font-size:11px;">${roleLabel(l.role)}</span></td>
-      <td dir="ltr" style="font-family:monospace; font-weight:700; color:var(--pri);">${esc(l.recipients)}</td>
-      <td>${fmt(l.salesTotal || 0)} ${currLabel()}</td>
-      <td><span style="color:#16a34a; font-weight:700;">${fmt(l.profitTotal || 0)} ${currLabel()}</span> (${l.invoiceCount || 0} فاتورة)</td>
-      <td><span style="color:#16a34a; font-weight:800;">🔒 موثق ومحمي</span></td>
-    </tr>
-  `).join('');
+  tbody.innerHTML = reportDispatchLogs.map(l => {
+    const chIcon = l.channel === 'email' ? '📧' : '📲';
+    return `
+      <tr>
+        <td style="font-weight:700;">${esc(l.displayTime || l.timestamp)}</td>
+        <td><strong>${esc(l.username)}</strong> <span class="badge" style="font-size:11px;">${roleLabel(l.role)}</span></td>
+        <td dir="ltr" style="font-family:monospace; font-weight:700; color:var(--pri);">${chIcon} ${esc(l.recipients)}</td>
+        <td>${fmt(l.salesTotal || 0)} ${currLabel()}</td>
+        <td><span style="color:#16a34a; font-weight:700;">${fmt(l.profitTotal || 0)} ${currLabel()}</span> (${l.invoiceCount || 0} فاتورة)</td>
+        <td><span style="color:#16a34a; font-weight:800;">🔒 موثق ومحمي</span></td>
+      </tr>
+    `;
+  }).join('');
 }
 
 function applyRoleVisibility(){
@@ -11877,9 +11954,15 @@ function viewSupplierInvoiceImage(txId){
     <h2>📊 إرسال التقرير اليومي للإدارة</h2>
     <div class="sub" style="margin-bottom: 14px;">سيتم توثيق عملية الإرسال تلقائيًا في سجل الجهاز الدائم باسمك.</div>
     
-    <div class="card" style="background:var(--paper); border:1px solid var(--line); border-radius:10px; padding:14px; margin-bottom:14px;">
-      <div style="font-size:12px; color:var(--muted); font-weight:600;">رقم هاتف الإدارة المعتمد (محمي ولا يمكن تعديله):</div>
-      <div id="cashierReportTargetPhoneDisplay" style="font-size:18px; font-weight:800; color:var(--pri); font-family:monospace; margin-top:4px;" dir="ltr">010xxxxxxxx</div>
+    <div class="card" style="background:var(--paper); border:1px solid var(--line); border-radius:10px; padding:12px; margin-bottom:14px;">
+      <div style="margin-bottom:8px;">
+        <div style="font-size:12px; color:var(--muted); font-weight:600;">رقم هاتف الإدارة المعتمد (واتساب):</div>
+        <div id="cashierReportTargetPhoneDisplay" style="font-size:16px; font-weight:800; color:var(--pri); font-family:monospace; margin-top:2px;" dir="ltr">010xxxxxxxx</div>
+      </div>
+      <div>
+        <div style="font-size:12px; color:var(--muted); font-weight:600;">البريد الإلكتروني المعتمد للإدارة:</div>
+        <div id="cashierReportTargetEmailDisplay" style="font-size:15px; font-weight:700; color:var(--pri); font-family:monospace; margin-top:2px;" dir="ltr">owner@example.com</div>
+      </div>
     </div>
 
     <div class="card" style="background:var(--card); border:1px solid var(--line); border-radius:10px; padding:14px; margin-bottom:16px;">
@@ -11900,8 +11983,11 @@ function viewSupplierInvoiceImage(txId){
 
     <div class="modal-actions" style="display:flex; gap:10px;">
       <button class="btn ghost" type="button" onclick="closeCashierReportModal()">إلغاء</button>
-      <button class="btn" type="button" onclick="dispatchReportByCashier('whatsapp')" style="background:#16a34a; border-color:#16a34a; font-weight:700; color:#fff;">
-        📲 إرسال واعتماد في السجل
+      <button class="btn" type="button" onclick="dispatchReportByCashier('whatsapp')" style="background:#16a34a; border-color:#16a34a; font-weight:700; color:#fff; flex:1;">
+        📲 إرسال عبر واتساب
+      </button>
+      <button class="btn" type="button" onclick="dispatchReportByCashier('email')" style="background:#0284c7; border-color:#0284c7; font-weight:700; color:#fff; flex:1;">
+        📧 إرسال عبر البريد
       </button>
     </div>
   </div>
@@ -15172,17 +15258,19 @@ function openWhatsAppDailyReport(){
 }
 
 async function saveScheduledReportSettings(){
-  if(!settings.cloudPharmacyId){
-    showToast('لازم تربط البرنامج بحساب سحابي أولًا (كارت المزامنة السحابية أعلاه) عشان يقدر السيرفر يقرأ إعداداتك');
-    return;
-  }
-  settings.dailyReportEnabled = document.getElementById('dailyReportEnabled').checked;
-  settings.dailyReportEmail = document.getElementById('dailyReportEmail').value.trim();
-  settings.dailyReportWhatsApp = document.getElementById('dailyReportWhatsApp').value.trim();
-  const kEl = document.getElementById('dailyReportCallMeBotKey'); if(kEl) settings.dailyReportCallMeBotKey = kEl.value.trim();
-  settings.dailyReportHourUTC = document.getElementById('dailyReportTime').value;
+  const enEl = document.getElementById('dailyReportEnabled');
+  if(enEl) settings.dailyReportEnabled = enEl.checked;
+  const emailEl = document.getElementById('dailyReportEmail');
+  if(emailEl) settings.dailyReportEmail = emailEl.value.trim();
+  const waEl = document.getElementById('dailyReportWhatsApp');
+  if(waEl) settings.dailyReportWhatsApp = waEl.value.trim();
+  const kEl = document.getElementById('dailyReportCallMeBotKey');
+  if(kEl) settings.dailyReportCallMeBotKey = kEl.value.trim();
+  const timeEl = document.getElementById('dailyReportTime');
+  if(timeEl) settings.dailyReportHourUTC = timeEl.value;
+
   await saveSettings();
-  showToast('تم حفظ إعدادات التقرير — لازم يكون السيرفر (Cloud Function) مرفوعًا عشان الإرسال يشتغل فعليًا');
+  showToast('✅ تم حفظ إعدادات التقرير ورقم الواتساب بنجاح!');
 }
 
 // =====================================================================
