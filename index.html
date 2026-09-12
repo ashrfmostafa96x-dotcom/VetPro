@@ -1111,6 +1111,819 @@ const XLSX = (function(){
     html.wide-mode .hero{ flex-direction:row; align-items:center; }
     html.wide-mode .export-mode-toggle{ flex-direction:row; align-items:center; }
   }
+
+
+/* === FIXED THEME REACTIVE SYSTEM === */
+
+  /* ==========================================================================
+     ULTRA-HIGH CONTRAST & THEME-AWARE DESIGN SYSTEM (LIGHT & DARK PERFECTED)
+     Guarantees 100% readability with zero disappearing text in all themes
+     ========================================================================== */
+
+  /* Global Polish & Hex Mesh Accent */
+  *, *::before, *::after {
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+  }
+
+  body {
+    background-color: var(--paper) !important;
+    background-image: 
+      radial-gradient(circle at 50% -10%, var(--sage-soft) 0%, transparent 65%),
+      url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='48' height='83.138' viewBox='0 0 48 83.138'%3E%3Cpath d='M48 41.569L24 55.426 0 41.569V13.856L24 0l24 13.856zm0 41.569L24 69.282 0 83.138V55.426l24-13.857 24 13.857z' fill='none' stroke='%23888888' stroke-width='0.6' stroke-opacity='0.1'/%3E%3C/svg%3E") !important;
+    background-size: 100% 100%, 48px 83.138px !important;
+    background-attachment: fixed !important;
+    color: var(--ink) !important;
+    font-family: var(--font-ui) !important;
+    letter-spacing: -0.01em !important;
+    min-height: 100vh;
+    transition: background-color 0.25s ease, color 0.25s ease !important;
+  }
+
+  /* 1. Sidebar (Dark Dock with Always-Crisp Light Text) */
+  .sidebar {
+    background: var(--teal-900) !important;
+    border-inline-end: 1px solid var(--line) !important;
+    box-shadow: 4px 0 24px -2px rgba(0, 0, 0, 0.4) !important;
+    padding: 22px 14px !important;
+    color: #f1f5f9 !important;
+    transition: background-color 0.25s ease, border-color 0.25s ease !important;
+  }
+
+  .sidebar .brand {
+    background: rgba(255, 255, 255, 0.07) !important;
+    border: 1px solid rgba(255, 255, 255, 0.12) !important;
+    border-radius: 16px !important;
+    padding: 14px 16px !important;
+    color: #ffffff !important;
+    position: relative !important;
+    overflow: hidden !important;
+  }
+
+  .sidebar .brand small {
+    background: rgba(255, 255, 255, 0.12) !important;
+    border: 1px solid rgba(255, 255, 255, 0.18) !important;
+    color: #38bdf8 !important;
+    border-radius: 20px !important;
+    padding: 2px 9px !important;
+  }
+
+  .nav button {
+    border-radius: 9999px !important;
+    padding: 10px 16px !important;
+    font-size: 13.5px !important;
+    font-weight: 700 !important;
+    color: rgba(255, 255, 255, 0.78) !important;
+    transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1) !important;
+    margin-bottom: 4px !important;
+  }
+
+  .nav button:hover {
+    color: #ffffff !important;
+    background: rgba(255, 255, 255, 0.1) !important;
+    transform: translateX(-3px) !important;
+  }
+
+  .nav button.active {
+    background: var(--sage) !important;
+    color: var(--sage-contrast, #ffffff) !important;
+    font-weight: 900 !important;
+    border: 1px solid var(--sage) !important;
+    box-shadow: 0 0 24px 3px var(--sage-soft), 0 4px 12px rgba(0, 0, 0, 0.35) !important;
+    transform: translateX(-4px) !important;
+  }
+
+  .nav button.active .nav-icon {
+    color: var(--sage-contrast, #ffffff) !important;
+    opacity: 1 !important;
+  }
+
+  .nav button.active .badge {
+    background: rgba(0, 0, 0, 0.3) !important;
+    color: #ffffff !important;
+  }
+
+  /* 2. Hero Dashboard (Always Crisp White Text on Dark Banner) */
+  .hero {
+    background: linear-gradient(135deg, var(--teal-800) 0%, var(--teal-900) 100%) !important;
+    border: 1px solid var(--sage) !important;
+    border-radius: 22px !important;
+    padding: 30px 34px !important;
+    box-shadow: 0 16px 40px -8px rgba(0, 0, 0, 0.45), 0 0 28px -8px var(--sage-soft) !important;
+    color: #ffffff !important;
+    position: relative !important;
+    overflow: hidden !important;
+  }
+
+  .hero::before {
+    content: '';
+    position: absolute;
+    top: 0; left: 0; right: 0;
+    height: 2px;
+    background: linear-gradient(90deg, transparent, var(--sage), transparent) !important;
+  }
+
+  .hero-figure .hero-label {
+    font-size: 13.5px !important;
+    color: rgba(255, 255, 255, 0.85) !important;
+    font-weight: 700 !important;
+  }
+
+  .hero-figure .hero-value,
+  .hero-figure .hero-value span {
+    font-size: 44px !important;
+    font-weight: 900 !important;
+    color: #ffffff !important;
+  }
+
+  .hero-stat {
+    background: rgba(255, 255, 255, 0.08) !important;
+    border: 1px solid rgba(255, 255, 255, 0.15) !important;
+    border-radius: 16px !important;
+    padding: 14px 20px !important;
+    min-width: 110px !important;
+    transition: all 0.2s ease !important;
+  }
+
+  .hero-stat .v {
+    font-size: 24px !important;
+    font-weight: 900 !important;
+    color: #38bdf8 !important;
+  }
+
+  .hero-stat .l {
+    font-size: 12.5px !important;
+    color: rgba(255, 255, 255, 0.85) !important;
+    font-weight: 700 !important;
+  }
+
+  /* 3. Cards & Text Contrast */
+  .card {
+    background: var(--card) !important;
+    border: 1px solid var(--line) !important;
+    border-radius: 18px !important;
+    padding: 24px 26px !important;
+    color: var(--ink) !important;
+    box-shadow: 0 4px 20px -2px rgba(0, 0, 0, 0.12) !important;
+    transition: background-color 0.25s ease, border-color 0.25s ease, transform 0.2s ease !important;
+  }
+
+  .card h1, .card h2, .card h3, .card h4 {
+    color: var(--ink) !important;
+    font-weight: 800 !important;
+  }
+
+  .card .sub, .empty-note {
+    color: var(--ink-soft) !important;
+    font-weight: 600 !important;
+  }
+
+  .field label {
+    color: var(--ink) !important;
+    font-weight: 700 !important;
+    font-size: 13px !important;
+  }
+
+  /* 4. Inputs & Selects */
+  input, select, textarea {
+    background: var(--card) !important;
+    border: 1px solid var(--line) !important;
+    border-radius: 12px !important;
+    padding: 11px 16px !important;
+    color: var(--ink) !important;
+    font-size: 14px !important;
+    font-weight: 600 !important;
+    outline: none !important;
+    transition: all 0.2s ease !important;
+  }
+
+  input:focus, select:focus, textarea:focus {
+    border-color: var(--sage) !important;
+    box-shadow: 0 0 0 3px var(--sage-soft) !important;
+  }
+
+  /* 5. Tables */
+  table {
+    background: var(--card) !important;
+    border: 1px solid var(--line) !important;
+    border-radius: 16px !important;
+    border-spacing: 0 !important;
+    border-collapse: separate !important;
+    overflow: hidden !important;
+  }
+
+  table thead th {
+    background: rgba(125, 125, 125, 0.08) !important;
+    color: var(--ink) !important;
+    font-size: 13px !important;
+    font-weight: 800 !important;
+    padding: 14px 16px !important;
+    border-bottom: 2px solid var(--line) !important;
+    text-transform: uppercase !important;
+  }
+
+  table tbody td {
+    padding: 13px 16px !important;
+    border-bottom: 1px solid var(--line) !important;
+    font-size: 13.5px !important;
+    color: var(--ink) !important;
+    vertical-align: middle !important;
+    font-weight: 600 !important;
+  }
+
+  table tbody tr:hover td {
+    background: var(--sage-soft) !important;
+  }
+
+  /* 6. Modals & Overlays */
+  .modal {
+    background: var(--card) !important;
+    border: 1px solid var(--line) !important;
+    border-radius: 22px !important;
+    box-shadow: 0 24px 60px -10px rgba(0, 0, 0, 0.45) !important;
+    color: var(--ink) !important;
+  }
+
+  .modal h1, .modal h2, .modal h3 {
+    color: var(--ink) !important;
+  }
+
+  /* 7. Buttons */
+  .btn {
+    border-radius: 9999px !important;
+    font-size: 13.5px !important;
+    font-weight: 800 !important;
+    padding: 10px 22px !important;
+    transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1) !important;
+    display: inline-flex !important;
+    align-items: center !important;
+    justify-content: center !important;
+    gap: 8px !important;
+    border: 1px solid transparent !important;
+  }
+
+  .btn:not(.ghost):not([style*="background:#16a34a"]):not([style*="background:#dc2626"]):not([style*="background:#0284c7"]) {
+    background: linear-gradient(135deg, var(--teal-700) 0%, var(--teal-800) 100%) !important;
+    color: #ffffff !important;
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.2) !important;
+  }
+
+  .btn.ghost {
+    background: var(--card) !important;
+    border: 1px solid var(--line) !important;
+    color: var(--ink) !important;
+  }
+
+  .btn.ghost:hover {
+    background: var(--sage-soft) !important;
+    border-color: var(--sage) !important;
+    color: var(--ink) !important;
+  }
+
+  /* 8. Period Tabs (High Contrast in Both Dark & Light Themes) */
+  .period-tabs {
+    display: flex !important;
+    gap: 10px !important;
+    margin-bottom: 22px !important;
+    flex-wrap: wrap !important;
+    align-items: center !important;
+    padding: 8px 10px !important;
+    background: var(--card) !important;
+    border: 1px solid var(--line) !important;
+    border-radius: 9999px !important;
+    width: fit-content !important;
+  }
+
+  .period-tabs button {
+    all: unset !important;
+    cursor: pointer !important;
+    display: inline-flex !important;
+    align-items: center !important;
+    justify-content: center !important;
+    padding: 9px 22px !important;
+    border-radius: 9999px !important;
+    font-size: 13.5px !important;
+    font-weight: 800 !important;
+    text-align: center !important;
+    transition: all 0.22s cubic-bezier(0.16, 1, 0.3, 1) !important;
+    user-select: none !important;
+  }
+
+  /* Specific Contrast Rules for Light Themes */
+  html[data-theme="clinical-white"],
+  html[data-theme="mint-pharmacist"],
+  html[data-theme="nordic-ice"],
+  html[data-theme="executive-platinum"],
+  html[data-theme="warm-sand-gold"],
+  html[data-theme="ivory-gold"] {
+    --ink: #0f172a !important;
+    --ink-soft: #334155 !important;
+  }
+
+  html[data-theme="clinical-white"] .period-tabs button[data-period="today"],
+  html[data-theme="mint-pharmacist"] .period-tabs button[data-period="today"],
+  html[data-theme="nordic-ice"] .period-tabs button[data-period="today"],
+  html[data-theme="executive-platinum"] .period-tabs button[data-period="today"],
+  html[data-theme="warm-sand-gold"] .period-tabs button[data-period="today"],
+  html[data-theme="ivory-gold"] .period-tabs button[data-period="today"] {
+    background: #e0e7ff !important;
+    color: #312e81 !important;
+    border: 1px solid #c7d2fe !important;
+  }
+
+  html[data-theme="clinical-white"] .period-tabs button[data-period="mtd"],
+  html[data-theme="mint-pharmacist"] .period-tabs button[data-period="mtd"],
+  html[data-theme="nordic-ice"] .period-tabs button[data-period="mtd"],
+  html[data-theme="executive-platinum"] .period-tabs button[data-period="mtd"],
+  html[data-theme="warm-sand-gold"] .period-tabs button[data-period="mtd"],
+  html[data-theme="ivory-gold"] .period-tabs button[data-period="mtd"] {
+    background: #dcfce7 !important;
+    color: #14532d !important;
+    border: 1px solid #bbf7d0 !important;
+  }
+
+  html[data-theme="clinical-white"] .period-tabs button[data-period="quarter"],
+  html[data-theme="mint-pharmacist"] .period-tabs button[data-period="quarter"],
+  html[data-theme="nordic-ice"] .period-tabs button[data-period="quarter"],
+  html[data-theme="executive-platinum"] .period-tabs button[data-period="quarter"],
+  html[data-theme="warm-sand-gold"] .period-tabs button[data-period="quarter"],
+  html[data-theme="ivory-gold"] .period-tabs button[data-period="quarter"] {
+    background: #fef3c7 !important;
+    color: #78350f !important;
+    border: 1px solid #fde68a !important;
+  }
+
+  html[data-theme="clinical-white"] .period-tabs button[data-period="year"],
+  html[data-theme="mint-pharmacist"] .period-tabs button[data-period="year"],
+  html[data-theme="nordic-ice"] .period-tabs button[data-period="year"],
+  html[data-theme="executive-platinum"] .period-tabs button[data-period="year"],
+  html[data-theme="warm-sand-gold"] .period-tabs button[data-period="year"],
+  html[data-theme="ivory-gold"] .period-tabs button[data-period="year"] {
+    background: #f3e8ff !important;
+    color: #581c87 !important;
+    border: 1px solid #e9d5ff !important;
+  }
+
+  html[data-theme="clinical-white"] .period-tabs button[data-period="all"],
+  html[data-theme="mint-pharmacist"] .period-tabs button[data-period="all"],
+  html[data-theme="nordic-ice"] .period-tabs button[data-period="all"],
+  html[data-theme="executive-platinum"] .period-tabs button[data-period="all"],
+  html[data-theme="warm-sand-gold"] .period-tabs button[data-period="all"],
+  html[data-theme="ivory-gold"] .period-tabs button[data-period="all"] {
+    background: #e0f2fe !important;
+    color: #0c4a6e !important;
+    border: 1px solid #bae6fd !important;
+  }
+
+  html[data-theme="clinical-white"] .period-tabs button[data-period="custom"],
+  html[data-theme="mint-pharmacist"] .period-tabs button[data-period="custom"],
+  html[data-theme="nordic-ice"] .period-tabs button[data-period="custom"],
+  html[data-theme="executive-platinum"] .period-tabs button[data-period="custom"],
+  html[data-theme="warm-sand-gold"] .period-tabs button[data-period="custom"],
+  html[data-theme="ivory-gold"] .period-tabs button[data-period="custom"] {
+    background: #ffe4e6 !important;
+    color: #881337 !important;
+    border: 1px solid #fecdd3 !important;
+  }
+
+  /* Active Period Tabs across all themes */
+  .period-tabs button[data-period="today"].active {
+    background: linear-gradient(135deg, #6366f1 0%, #818cf8 100%) !important;
+    color: #000000 !important;
+    font-weight: 900 !important;
+    box-shadow: 0 0 24px 3px rgba(99, 102, 241, 0.7) !important;
+  }
+  .period-tabs button[data-period="mtd"].active {
+    background: linear-gradient(135deg, #10b981 0%, #34d399 100%) !important;
+    color: #000000 !important;
+    font-weight: 900 !important;
+    box-shadow: 0 0 24px 3px rgba(16, 185, 129, 0.7) !important;
+  }
+  .period-tabs button[data-period="quarter"].active {
+    background: linear-gradient(135deg, #f59e0b 0%, #fbbf24 100%) !important;
+    color: #000000 !important;
+    font-weight: 900 !important;
+    box-shadow: 0 0 24px 3px rgba(245, 158, 11, 0.7) !important;
+  }
+  .period-tabs button[data-period="year"].active {
+    background: linear-gradient(135deg, #a855f7 0%, #c084fc 100%) !important;
+    color: #000000 !important;
+    font-weight: 900 !important;
+    box-shadow: 0 0 24px 3px rgba(168, 85, 247, 0.7) !important;
+  }
+  .period-tabs button[data-period="all"].active {
+    background: linear-gradient(135deg, #0284c7 0%, #38bdf8 100%) !important;
+    color: #000000 !important;
+    font-weight: 900 !important;
+    box-shadow: 0 0 24px 3px rgba(2, 132, 199, 0.7) !important;
+  }
+  .period-tabs button[data-period="custom"].active {
+    background: linear-gradient(135deg, #e11d48 0%, #fb7185 100%) !important;
+    color: #ffffff !important;
+    font-weight: 900 !important;
+    box-shadow: 0 0 24px 3px rgba(225, 29, 72, 0.7) !important;
+  }
+
+
+/* === COMPREHENSIVE LIGHT THEMES CONTRAST ENGINE === */
+
+  /* ==========================================================================
+     COMPREHENSIVE LIGHT THEMES CONTRAST & TOP-LEFT READABILITY ENGINE
+     Applied to: clinical-white, mint-pharmacist, nordic-ice, executive-platinum,
+                 warm-sand-gold, ivory-gold
+     ========================================================================== */
+
+  /* 1. Connection Indicator on Top-Left (#connIndicatorWrap) */
+  #connIndicatorWrap {
+    position: fixed !important;
+    top: 14px !important;
+    left: 14px !important;
+    z-index: 250 !important;
+    display: flex !important;
+    align-items: center !important;
+    gap: 8px !important;
+    padding: 6px 14px !important;
+    border-radius: 9999px !important;
+    font-size: 12.5px !important;
+    font-weight: 800 !important;
+    pointer-events: none !important;
+  }
+
+  /* In dark themes */
+  #connIndicatorWrap {
+    background: rgba(15, 23, 42, 0.92) !important;
+    border: 1.5px solid rgba(255, 255, 255, 0.18) !important;
+    color: #f8fafc !important;
+    box-shadow: 0 4px 14px rgba(0, 0, 0, 0.4) !important;
+  }
+  #connIndicatorWrap #connIndicatorText {
+    color: #f8fafc !important;
+    font-weight: 800 !important;
+  }
+
+  /* In all light themes */
+  html[data-theme="clinical-white"] #connIndicatorWrap,
+  html[data-theme="mint-pharmacist"] #connIndicatorWrap,
+  html[data-theme="nordic-ice"] #connIndicatorWrap,
+  html[data-theme="executive-platinum"] #connIndicatorWrap,
+  html[data-theme="warm-sand-gold"] #connIndicatorWrap,
+  html[data-theme="ivory-gold"] #connIndicatorWrap {
+    background: #ffffff !important;
+    border: 1.5px solid #94a3b8 !important;
+    box-shadow: 0 4px 14px rgba(0, 0, 0, 0.12) !important;
+  }
+
+  html[data-theme="clinical-white"] #connIndicatorWrap #connIndicatorText,
+  html[data-theme="mint-pharmacist"] #connIndicatorWrap #connIndicatorText,
+  html[data-theme="nordic-ice"] #connIndicatorWrap #connIndicatorText,
+  html[data-theme="executive-platinum"] #connIndicatorWrap #connIndicatorText,
+  html[data-theme="warm-sand-gold"] #connIndicatorWrap #connIndicatorText,
+  html[data-theme="ivory-gold"] #connIndicatorWrap #connIndicatorText {
+    color: #0f172a !important;
+    font-weight: 900 !important;
+  }
+
+  /* 2. Comprehensive High Contrast Overrides for Light Themes */
+  html[data-theme="clinical-white"],
+  html[data-theme="mint-pharmacist"],
+  html[data-theme="nordic-ice"],
+  html[data-theme="executive-platinum"],
+  html[data-theme="warm-sand-gold"],
+  html[data-theme="ivory-gold"] {
+    --ink: #0f172a !important;
+    --ink-soft: #1e293b !important;
+  }
+
+  html[data-theme="clinical-white"] h1, html[data-theme="clinical-white"] h2, html[data-theme="clinical-white"] h3, html[data-theme="clinical-white"] h4,
+  html[data-theme="mint-pharmacist"] h1, html[data-theme="mint-pharmacist"] h2, html[data-theme="mint-pharmacist"] h3, html[data-theme="mint-pharmacist"] h4,
+  html[data-theme="nordic-ice"] h1, html[data-theme="nordic-ice"] h2, html[data-theme="nordic-ice"] h3, html[data-theme="nordic-ice"] h4,
+  html[data-theme="executive-platinum"] h1, html[data-theme="executive-platinum"] h2, html[data-theme="executive-platinum"] h3, html[data-theme="executive-platinum"] h4,
+  html[data-theme="warm-sand-gold"] h1, html[data-theme="warm-sand-gold"] h2, html[data-theme="warm-sand-gold"] h3, html[data-theme="warm-sand-gold"] h4,
+  html[data-theme="ivory-gold"] h1, html[data-theme="ivory-gold"] h2, html[data-theme="ivory-gold"] h3, html[data-theme="ivory-gold"] h4 {
+    color: #0f172a !important;
+    font-weight: 900 !important;
+  }
+
+  html[data-theme="clinical-white"] .sub, html[data-theme="clinical-white"] .empty-note, html[data-theme="clinical-white"] #todayDate,
+  html[data-theme="mint-pharmacist"] .sub, html[data-theme="mint-pharmacist"] .empty-note, html[data-theme="mint-pharmacist"] #todayDate,
+  html[data-theme="nordic-ice"] .sub, html[data-theme="nordic-ice"] .empty-note, html[data-theme="nordic-ice"] #todayDate,
+  html[data-theme="executive-platinum"] .sub, html[data-theme="executive-platinum"] .empty-note, html[data-theme="executive-platinum"] #todayDate,
+  html[data-theme="warm-sand-gold"] .sub, html[data-theme="warm-sand-gold"] .empty-note, html[data-theme="warm-sand-gold"] #todayDate,
+  html[data-theme="ivory-gold"] .sub, html[data-theme="ivory-gold"] .empty-note, html[data-theme="ivory-gold"] #todayDate {
+    color: #334155 !important;
+    font-weight: 700 !important;
+  }
+
+  /* Inputs, Search Bars & Placeholders in Light Themes */
+  html[data-theme="clinical-white"] input, html[data-theme="clinical-white"] select, html[data-theme="clinical-white"] textarea,
+  html[data-theme="mint-pharmacist"] input, html[data-theme="mint-pharmacist"] select, html[data-theme="mint-pharmacist"] textarea,
+  html[data-theme="nordic-ice"] input, html[data-theme="nordic-ice"] select, html[data-theme="nordic-ice"] textarea,
+  html[data-theme="executive-platinum"] input, html[data-theme="executive-platinum"] select, html[data-theme="executive-platinum"] textarea,
+  html[data-theme="warm-sand-gold"] input, html[data-theme="warm-sand-gold"] select, html[data-theme="warm-sand-gold"] textarea,
+  html[data-theme="ivory-gold"] input, html[data-theme="ivory-gold"] select, html[data-theme="ivory-gold"] textarea {
+    background: #ffffff !important;
+    border: 1.5px solid #94a3b8 !important;
+    color: #0f172a !important;
+    font-weight: 700 !important;
+  }
+
+  html[data-theme="clinical-white"] input::placeholder,
+  html[data-theme="mint-pharmacist"] input::placeholder,
+  html[data-theme="nordic-ice"] input::placeholder,
+  html[data-theme="executive-platinum"] input::placeholder,
+  html[data-theme="warm-sand-gold"] input::placeholder,
+  html[data-theme="ivory-gold"] input::placeholder {
+    color: #64748b !important;
+    opacity: 1 !important;
+    font-weight: 600 !important;
+  }
+
+  /* Toolbars, Buttons & Actions on the Top-Left of views */
+  html[data-theme="clinical-white"] .btn.ghost,
+  html[data-theme="mint-pharmacist"] .btn.ghost,
+  html[data-theme="nordic-ice"] .btn.ghost,
+  html[data-theme="executive-platinum"] .btn.ghost,
+  html[data-theme="warm-sand-gold"] .btn.ghost,
+  html[data-theme="ivory-gold"] .btn.ghost {
+    background: #ffffff !important;
+    border: 1.5px solid #94a3b8 !important;
+    color: #0f172a !important;
+    font-weight: 800 !important;
+  }
+
+  html[data-theme="clinical-white"] .btn.ghost:hover,
+  html[data-theme="mint-pharmacist"] .btn.ghost:hover,
+  html[data-theme="nordic-ice"] .btn.ghost:hover,
+  html[data-theme="executive-platinum"] .btn.ghost:hover,
+  html[data-theme="warm-sand-gold"] .btn.ghost:hover,
+  html[data-theme="ivory-gold"] .btn.ghost:hover {
+    background: #e2e8f0 !important;
+    color: #000000 !important;
+  }
+
+  /* Export Action Buttons (Excel / PDF) */
+  .excel-btn, .excel-btn.report-export-btn {
+    background: #15803d !important;
+    color: #ffffff !important;
+    border: 1px solid #166534 !important;
+    font-weight: 800 !important;
+    box-shadow: 0 2px 8px rgba(21, 128, 61, 0.3) !important;
+  }
+  .pdf-btn, .pdf-btn.report-export-btn {
+    background: #b91c1c !important;
+    color: #ffffff !important;
+    border: 1px solid #991b1b !important;
+    font-weight: 800 !important;
+    box-shadow: 0 2px 8px rgba(185, 28, 28, 0.3) !important;
+  }
+
+  /* Invoice Cards in Today Panel (Left Side of Sales View) */
+  html[data-theme="clinical-white"] .inv-card,
+  html[data-theme="mint-pharmacist"] .inv-card,
+  html[data-theme="nordic-ice"] .inv-card,
+  html[data-theme="executive-platinum"] .inv-card,
+  html[data-theme="warm-sand-gold"] .inv-card,
+  html[data-theme="ivory-gold"] .inv-card {
+    background: #ffffff !important;
+    border: 1.5px solid #cbd5e1 !important;
+    color: #0f172a !important;
+    box-shadow: 0 2px 6px rgba(0, 0, 0, 0.06) !important;
+  }
+
+  html[data-theme="clinical-white"] .inv-card .header,
+  html[data-theme="mint-pharmacist"] .inv-card .header,
+  html[data-theme="nordic-ice"] .inv-card .header,
+  html[data-theme="executive-platinum"] .inv-card .header,
+  html[data-theme="warm-sand-gold"] .inv-card .header,
+  html[data-theme="ivory-gold"] .inv-card .header {
+    color: #0f172a !important;
+    font-weight: 800 !important;
+  }
+
+  html[data-theme="clinical-white"] .inv-card .info,
+  html[data-theme="mint-pharmacist"] .inv-card .info,
+  html[data-theme="nordic-ice"] .inv-card .info,
+  html[data-theme="executive-platinum"] .inv-card .info,
+  html[data-theme="warm-sand-gold"] .inv-card .info,
+  html[data-theme="ivory-gold"] .inv-card .info {
+    color: #334155 !important;
+    font-weight: 700 !important;
+  }
+
+  /* Invoices Dashboard in Past Invoices View */
+  .invoices-dashboard {
+    background: linear-gradient(135deg, #1e293b 0%, #0f172a 100%) !important;
+    color: #ffffff !important;
+    border: 1px solid rgba(255, 255, 255, 0.15) !important;
+  }
+  .invoices-dashboard .dash-label {
+    color: rgba(255, 255, 255, 0.85) !important;
+    font-weight: 700 !important;
+  }
+  .invoices-dashboard .dash-value {
+    color: #38bdf8 !important;
+    font-weight: 900 !important;
+  }
+
+  /* Table Headers and Data Cells in Light Themes */
+  html[data-theme="clinical-white"] table thead th,
+  html[data-theme="mint-pharmacist"] table thead th,
+  html[data-theme="nordic-ice"] table thead th,
+  html[data-theme="executive-platinum"] table thead th,
+  html[data-theme="warm-sand-gold"] table thead th,
+  html[data-theme="ivory-gold"] table thead th {
+    background: #e2e8f0 !important;
+    color: #0f172a !important;
+    font-weight: 900 !important;
+    border-bottom: 2px solid #cbd5e1 !important;
+  }
+
+  html[data-theme="clinical-white"] table tbody td,
+  html[data-theme="mint-pharmacist"] table tbody td,
+  html[data-theme="nordic-ice"] table tbody td,
+  html[data-theme="executive-platinum"] table tbody td,
+  html[data-theme="warm-sand-gold"] table tbody td,
+  html[data-theme="ivory-gold"] table tbody td {
+    color: #0f172a !important;
+    border-bottom: 1px solid #e2e8f0 !important;
+    font-weight: 600 !important;
+  }
+
+
+/* ===== VET PRO BRAND & DYNAMIC RANDOM GLOW TABS ===== */
+.sidebar .brand {
+  flex-shrink: 0 !important;
+  background: rgba(255, 255, 255, 0.08) !important;
+  border: 1px solid rgba(255, 255, 255, 0.18) !important;
+  border-radius: 18px !important;
+  padding: 14px 16px !important;
+  color: #ffffff !important;
+  position: relative !important;
+  overflow: visible !important;
+  box-shadow: 0 8px 24px -4px rgba(0, 0, 0, 0.4) !important;
+  margin-bottom: 14px !important;
+  display: block !important;
+  text-align: right !important;
+}
+
+.sidebar .brand .brand-title-wrap {
+  display: flex !important;
+  align-items: center !important;
+  gap: 12px !important;
+}
+
+.sidebar .brand .brand-icon {
+  font-size: 28px !important;
+  line-height: 1 !important;
+  filter: drop-shadow(0 0 10px rgba(56, 189, 248, 0.7)) !important;
+  flex-shrink: 0 !important;
+}
+
+.sidebar .brand .brand-name-wrap {
+  display: flex !important;
+  flex-direction: column !important;
+  align-items: flex-start !important;
+  gap: 3px !important;
+}
+
+.sidebar .brand .brand-name {
+  font-size: 22px !important;
+  font-weight: 900 !important;
+  letter-spacing: 1px !important;
+  color: #ffffff !important;
+  line-height: 1.1 !important;
+  text-shadow: 0 0 14px rgba(255, 255, 255, 0.45) !important;
+}
+
+.sidebar .brand .brand-sub {
+  font-size: 11px !important;
+  font-weight: 700 !important;
+  color: #38bdf8 !important;
+  background: rgba(56, 189, 248, 0.18) !important;
+  border: 1px solid rgba(56, 189, 248, 0.35) !important;
+  border-radius: 9999px !important;
+  padding: 2px 8px !important;
+  display: inline-block !important;
+}
+
+.sidebar .brand #brandBranchLabel {
+  background: rgba(16, 185, 129, 0.22) !important;
+  border: 1px solid rgba(16, 185, 129, 0.45) !important;
+  color: #34d399 !important;
+  border-radius: 9999px !important;
+  padding: 3px 10px !important;
+  font-size: 11px !important;
+  font-weight: 800 !important;
+  margin-top: 8px !important;
+  text-align: center !important;
+}
+
+.sidebar .brand #brandBranchLabel:empty {
+  display: none !important;
+}
+
+.sidebar .brand #brandBranchLabel:not(:empty) {
+  display: block !important;
+}
+
+/* Login Screen Brand Prominence */
+.login-brand-badge {
+  font-size: 44px !important;
+  line-height: 1 !important;
+  margin-bottom: 8px !important;
+  filter: drop-shadow(0 0 16px rgba(56, 189, 248, 0.7)) !important;
+  text-align: center !important;
+}
+
+.login-box h1.login-brand-title,
+.login-box h1 {
+  font-size: 32px !important;
+  font-weight: 900 !important;
+  letter-spacing: 1.5px !important;
+  color: var(--ink) !important;
+  margin-bottom: 6px !important;
+  -webkit-text-fill-color: initial !important;
+  text-align: center !important;
+  display: block !important;
+}
+
+.login-brand-sub {
+  display: inline-block !important;
+  font-size: 12.5px !important;
+  font-weight: 700 !important;
+  color: var(--sage, #38bdf8) !important;
+  background: var(--sage-soft, rgba(56, 189, 248, 0.15)) !important;
+  border: 1px solid var(--line) !important;
+  border-radius: 9999px !important;
+  padding: 4px 16px !important;
+  margin-bottom: 14px !important;
+  text-align: center !important;
+}
+
+/* Mobile Top Brand Floating Header */
+.mobile-top-brand {
+  display: none;
+}
+
+@media (max-width: 860px) {
+  .mobile-top-brand {
+    display: flex !important;
+    align-items: center !important;
+    gap: 8px !important;
+    position: fixed !important;
+    top: 14px !important;
+    right: 70px !important;
+    z-index: 210 !important;
+    padding: 7px 15px !important;
+    background: var(--card) !important;
+    border: 1px solid var(--line) !important;
+    border-radius: 9999px !important;
+    box-shadow: 0 4px 14px rgba(0, 0, 0, 0.25) !important;
+  }
+  .mobile-top-brand .brand-icon {
+    font-size: 18px !important;
+  }
+  .mobile-top-brand .brand-text {
+    font-size: 14px !important;
+    font-weight: 900 !important;
+    color: var(--ink) !important;
+    letter-spacing: 0.5px !important;
+  }
+}
+
+/* Dynamic Random Glowing Navigation Buttons */
+.nav button {
+  transition: all 0.22s cubic-bezier(0.4, 0, 0.2, 1) !important;
+}
+
+.nav button.active {
+  background: var(--nav-active-bg, var(--sage)) !important;
+  color: var(--nav-active-color, #000000) !important;
+  font-weight: 900 !important;
+  border: 1px solid var(--nav-active-border, rgba(255, 255, 255, 0.6)) !important;
+  box-shadow: var(--nav-active-glow, 0 0 24px 4px rgba(56, 189, 248, 0.85)) !important;
+  text-shadow: var(--nav-active-shadow, none) !important;
+  transform: translateX(-5px) !important;
+}
+
+.nav button.active .nav-icon {
+  color: var(--nav-active-color, #000000) !important;
+  opacity: 1 !important;
+  filter: drop-shadow(0 0 4px rgba(0, 0, 0, 0.35)) !important;
+}
+
+.nav button.active .nav-label,
+.nav button.active .nav-label span {
+  color: var(--nav-active-color, #000000) !important;
+  font-weight: 900 !important;
+}
+
+.nav button.active .badge {
+  background: rgba(0, 0, 0, 0.45) !important;
+  color: #ffffff !important;
+  border: 1px solid rgba(255, 255, 255, 0.3) !important;
+}
+
 </style>
 </head>
 <body>
@@ -1118,7 +1931,9 @@ const XLSX = (function(){
 <!-- LOGIN -->
 <div id="loginOverlay">
   <div class="login-box">
-    <h1>VET PRO</h1>
+    <div class="login-brand-badge">🏥</div>
+    <h1 class="login-brand-title">VET PRO</h1>
+    <div class="login-brand-sub">نظام إدارة الصيدليات والعيادات البيطرية</div>
     <div class="sub">تسجيل الدخول للمتابعة</div>
     <div class="login-note" id="firstRunNote" style="display:none;">أول استخدام: تم إنشاء حساب مدير افتراضي<br>اسم المستخدم: <b>admin</b> — كلمة المرور: <b>1234</b></div>
     <div class="field"><label>اسم المستخدم</label><input id="loginUser" autofocus onkeydown="if(event.key==='Enter') attemptLogin()"></div>
@@ -1152,7 +1967,11 @@ const XLSX = (function(){
 </div>
 
 <!-- APP SIDEBAR -->
-<button id="mobileMenuBtn" onclick="toggleMobileSidebar()">☰</button>
+<div id="mobileTopBrand" class="mobile-top-brand">
+  <span class="brand-icon">🏥</span>
+  <span class="brand-text">VET PRO</span>
+</div>
+<button id="mobileMenuBtn" onclick="toggleMobileSidebar()" aria-label="القائمة">☰</button>
 <div id="sidebarBackdrop" onclick="toggleMobileSidebar(false)"></div>
 <svg style="display:none;" aria-hidden="true">
   <defs>
@@ -1316,7 +2135,16 @@ const XLSX = (function(){
   <span id="connIndicatorText">محلي فقط</span>
 </div>
 <div class="sidebar hidden" id="sidebar">
-  <div class="brand">VET<br>PRO<small>نسخة الكمبيوتر</small><small id="brandBranchLabel" style="display:block; color:var(--sage); font-weight:800; margin-top:2px;"></small></div>
+  <div class="brand">
+    <div class="brand-title-wrap">
+      <span class="brand-icon">🏥</span>
+      <div class="brand-name-wrap">
+        <span class="brand-name">VET PRO</span>
+        <span class="brand-sub">النسخة الاحترافية</span>
+      </div>
+    </div>
+    <small id="brandBranchLabel"></small>
+  </div>
   <nav class="nav">
     <button data-view="dashboard" data-roles="manager,cashier,branch_manager" class="active"><span class="nav-label"><svg class="nav-icon"><use href="#ico-dashboard"/></svg><span>لوحة التحكم</span></span></button>
     <button data-view="sales" data-roles="manager,cashier,branch_manager"><span class="nav-label"><svg class="nav-icon"><use href="#ico-sales"/></svg><span>تسجيل بيع (الفواتير)</span></span></button>
@@ -3438,6 +4266,52 @@ const XLSX = (function(){
     <div class="modal-actions">
       <button class="btn ghost" onclick="closeCloudReconnectModal()">إلغاء</button>
       <button class="btn" onclick="submitCloudReconnect()">إعادة الاتصال</button>
+    </div>
+  </div>
+</div>
+
+
+<!-- Cashier Daily Report Send Modal -->
+<div class="overlay" id="cashierReportModalOverlay">
+  <div class="modal" style="max-width: 480px;">
+    <h2>📊 إرسال التقرير اليومي للإدارة</h2>
+    <div class="sub" style="margin-bottom: 14px;">سيتم توثيق عملية الإرسال تلقائيًا في سجل الجهاز الدائم باسمك.</div>
+    
+    <div class="card" style="background:var(--paper); border:1px solid var(--line); border-radius:10px; padding:12px; margin-bottom:14px;">
+      <div style="margin-bottom:8px;">
+        <div style="font-size:12px; color:var(--muted); font-weight:600;">رقم هاتف الإدارة المعتمد (واتساب):</div>
+        <div id="cashierReportTargetPhoneDisplay" style="font-size:16px; font-weight:800; color:var(--pri); font-family:monospace; margin-top:2px;" dir="ltr">010xxxxxxxx</div>
+      </div>
+      <div>
+        <div style="font-size:12px; color:var(--muted); font-weight:600;">البريد الإلكتروني المعتمد للإدارة:</div>
+        <div id="cashierReportTargetEmailDisplay" style="font-size:15px; font-weight:700; color:var(--pri); font-family:monospace; margin-top:2px;" dir="ltr">owner@example.com</div>
+      </div>
+    </div>
+
+    <div class="card" style="background:var(--card); border:1px solid var(--line); border-radius:10px; padding:14px; margin-bottom:16px;">
+      <div style="font-weight:700; margin-bottom:10px; font-size:14px; border-bottom:1px solid var(--line); padding-bottom:6px;">📈 ملخص التقرير المرفوع:</div>
+      <div style="display:flex; justify-content:space-between; margin-bottom:6px; font-size:13.5px;">
+        <span>إجمالي المبيعات:</span>
+        <strong id="cashierReportSalesPreview" style="color:var(--pri);">0.00</strong>
+      </div>
+      <div style="display:flex; justify-content:space-between; margin-bottom:6px; font-size:13.5px;">
+        <span>صافي الأرباح:</span>
+        <strong id="cashierReportProfitPreview" style="color:#16a34a;">0.00</strong>
+      </div>
+      <div style="display:flex; justify-content:space-between; font-size:13.5px;">
+        <span>عدد الفواتير المنجزة:</span>
+        <strong id="cashierReportInvoicesPreview">0</strong>
+      </div>
+    </div>
+
+    <div class="modal-actions" style="display:flex; gap:10px;">
+      <button class="btn ghost" type="button" onclick="closeCashierReportModal()">إلغاء</button>
+      <button class="btn" type="button" onclick="dispatchReportByCashier('whatsapp')" style="background:#16a34a; border-color:#16a34a; font-weight:700; color:#fff; flex:1;">
+        📲 إرسال عبر واتساب
+      </button>
+      <button class="btn" type="button" onclick="dispatchReportByCashier('email')" style="background:#0284c7; border-color:#0284c7; font-weight:700; color:#fff; flex:1;">
+        📧 إرسال عبر البريد
+      </button>
     </div>
   </div>
 </div>
@@ -6242,10 +7116,137 @@ function showToast(msg){
 function genBarcode(){ return (Date.now().toString().slice(-9) + Math.floor(Math.random()*90+10)).slice(0,12); }
 
 // Navigation
+
+// ===== DYNAMIC RANDOM GLOW PALETTE FOR SIDEBAR TABS =====
+const NAV_GLOW_PALETTE = [
+  {
+    name: 'cyber-cyan',
+    bg: 'linear-gradient(135deg, #00f2fe 0%, #4facfe 100%)',
+    color: '#021827',
+    border: '#70e2ff',
+    glow: '0 0 26px 4px rgba(0, 242, 254, 0.85), 0 4px 14px rgba(0, 0, 0, 0.5)',
+    textShadow: 'none'
+  },
+  {
+    name: 'neon-emerald',
+    bg: 'linear-gradient(135deg, #10b981 0%, #34d399 100%)',
+    color: '#012b18',
+    border: '#6ee7b7',
+    glow: '0 0 26px 4px rgba(16, 185, 129, 0.85), 0 4px 14px rgba(0, 0, 0, 0.5)',
+    textShadow: 'none'
+  },
+  {
+    name: 'electric-violet',
+    bg: 'linear-gradient(135deg, #8b5cf6 0%, #c084fc 100%)',
+    color: '#1e053a',
+    border: '#e9d5ff',
+    glow: '0 0 26px 4px rgba(168, 85, 247, 0.85), 0 4px 14px rgba(0, 0, 0, 0.5)',
+    textShadow: 'none'
+  },
+  {
+    name: 'solar-amber',
+    bg: 'linear-gradient(135deg, #f59e0b 0%, #fbbf24 100%)',
+    color: '#291200',
+    border: '#fef08a',
+    glow: '0 0 26px 4px rgba(245, 158, 11, 0.85), 0 4px 14px rgba(0, 0, 0, 0.5)',
+    textShadow: 'none'
+  },
+  {
+    name: 'hyper-crimson',
+    bg: 'linear-gradient(135deg, #f43f5e 0%, #fb7185 100%)',
+    color: '#38020e',
+    border: '#fecdd3',
+    glow: '0 0 26px 4px rgba(244, 63, 94, 0.85), 0 4px 14px rgba(0, 0, 0, 0.5)',
+    textShadow: 'none'
+  },
+  {
+    name: 'luminescent-lime',
+    bg: 'linear-gradient(135deg, #84cc16 0%, #bef264 100%)',
+    color: '#1a2e05',
+    border: '#d9f99d',
+    glow: '0 0 26px 4px rgba(132, 204, 22, 0.85), 0 4px 14px rgba(0, 0, 0, 0.5)',
+    textShadow: 'none'
+  },
+  {
+    name: 'aqua-turquoise',
+    bg: 'linear-gradient(135deg, #06b6d4 0%, #22d3ee 100%)',
+    color: '#032b30',
+    border: '#a5f3fc',
+    glow: '0 0 26px 4px rgba(6, 182, 212, 0.85), 0 4px 14px rgba(0, 0, 0, 0.5)',
+    textShadow: 'none'
+  },
+  {
+    name: 'radiant-magenta',
+    bg: 'linear-gradient(135deg, #d946ef 0%, #f0abfc 100%)',
+    color: '#35043d',
+    border: '#fae8ff',
+    glow: '0 0 26px 4px rgba(217, 70, 239, 0.85), 0 4px 14px rgba(0, 0, 0, 0.5)',
+    textShadow: 'none'
+  },
+  {
+    name: 'blaze-orange',
+    bg: 'linear-gradient(135deg, #f97316 0%, #fdba74 100%)',
+    color: '#360f00',
+    border: '#ffedd5',
+    glow: '0 0 26px 4px rgba(249, 115, 22, 0.85), 0 4px 14px rgba(0, 0, 0, 0.5)',
+    textShadow: 'none'
+  },
+  {
+    name: 'royal-sapphire',
+    bg: 'linear-gradient(135deg, #3b82f6 0%, #93c5fd 100%)',
+    color: '#081d42',
+    border: '#bfdbfe',
+    glow: '0 0 26px 4px rgba(59, 130, 246, 0.85), 0 4px 14px rgba(0, 0, 0, 0.5)',
+    textShadow: 'none'
+  },
+  {
+    name: 'gold-sunlight',
+    bg: 'linear-gradient(135deg, #eab308 0%, #fef08a 100%)',
+    color: '#2b1f02',
+    border: '#fef9c3',
+    glow: '0 0 26px 4px rgba(234, 179, 8, 0.85), 0 4px 14px rgba(0, 0, 0, 0.5)',
+    textShadow: 'none'
+  },
+  {
+    name: 'spring-mint',
+    bg: 'linear-gradient(135deg, #14b8a6 0%, #5eead4 100%)',
+    color: '#022a25',
+    border: '#99f6e4',
+    glow: '0 0 26px 4px rgba(20, 184, 166, 0.85), 0 4px 14px rgba(0, 0, 0, 0.5)',
+    textShadow: 'none'
+  }
+];
+
+let lastGlowIdx = -1;
+function applyRandomNavGlow(targetBtn) {
+  if (!targetBtn) return;
+  document.querySelectorAll('.nav button').forEach(b => {
+    b.style.removeProperty('--nav-active-bg');
+    b.style.removeProperty('--nav-active-color');
+    b.style.removeProperty('--nav-active-border');
+    b.style.removeProperty('--nav-active-glow');
+    b.style.removeProperty('--nav-active-shadow');
+  });
+
+  let idx;
+  do {
+    idx = Math.floor(Math.random() * NAV_GLOW_PALETTE.length);
+  } while (idx === lastGlowIdx && NAV_GLOW_PALETTE.length > 1);
+  lastGlowIdx = idx;
+
+  const p = NAV_GLOW_PALETTE[idx];
+  targetBtn.style.setProperty('--nav-active-bg', p.bg);
+  targetBtn.style.setProperty('--nav-active-color', p.color);
+  targetBtn.style.setProperty('--nav-active-border', p.border);
+  targetBtn.style.setProperty('--nav-active-glow', p.glow);
+  targetBtn.style.setProperty('--nav-active-shadow', p.textShadow);
+}
+
 document.querySelectorAll('.nav button').forEach(btn=>{
   btn.addEventListener('click', ()=>{
     document.querySelectorAll('.nav button').forEach(b=>b.classList.remove('active'));
     btn.classList.add('active');
+    applyRandomNavGlow(btn);
     document.querySelectorAll('.view').forEach(v=>v.classList.remove('active'));
     document.getElementById('view-'+btn.dataset.view).classList.add('active');
     // On a phone, the sidebar is an overlay drawer — picking a page from it
@@ -6280,6 +7281,10 @@ document.querySelectorAll('.nav button').forEach(btn=>{
     if(btn.dataset.view==='loyalty'){ renderLoyaltyView(); }
     if(btn.dataset.view==='services') renderServicesTable();
     if(btn.dataset.view==='dashboard') renderDashboard();
+
+  const initActiveBtn = document.querySelector('.nav button.active');
+  if(initActiveBtn && typeof applyRandomNavGlow === 'function') applyRandomNavGlow(initActiveBtn);
+
     if(btn.dataset.view==='expenses') renderExpensesTable();
     if(btn.dataset.view==='closing'){
       document.getElementById('closingCountedCash').value = '';
@@ -9342,10 +10347,17 @@ function renderThemeGrid(){
 async function setTheme(key){
   if(!THEMES[key]) return;
   document.documentElement.setAttribute('data-theme', key);
-  await setKey('vetpharm:theme', key);
-  settings.theme = key;
-  await saveSettings();
-  renderThemeGrid();
+  try {
+    if(typeof setKey === 'function') await setKey('vetpharm:theme', key);
+    if(typeof settings !== 'undefined'){
+      settings.theme = key;
+      if(typeof saveSettings === 'function') await saveSettings();
+    }
+  } catch(e){
+    console.error('Theme save error:', e);
+  }
+  if(typeof renderThemeGrid === 'function') renderThemeGrid();
+  if(typeof showToast === 'function') showToast('🎨 تم تغيير المظهر إلى: ' + THEMES[key].name);
 }
 
 function applyFontSize(pct, persist){
@@ -11947,53 +12959,7 @@ function viewSupplierInvoiceImage(txId){
   const t = transactions.find(x=>x.id===txId);
   if(!t || !t.supplierInvoiceImage) return;
   const w = window.open('');
-  if(w) w.document.write(`<title>صورة فاتورة المورد</title><body style="margin:0; background:#222; display:flex; justify-content:center;"><img src="${t.supplierInvoiceImage}" style="max-width:100%; height:auto;">
-<!-- Cashier Daily Report Send Modal -->
-<div class="overlay" id="cashierReportModalOverlay">
-  <div class="modal" style="max-width: 480px;">
-    <h2>📊 إرسال التقرير اليومي للإدارة</h2>
-    <div class="sub" style="margin-bottom: 14px;">سيتم توثيق عملية الإرسال تلقائيًا في سجل الجهاز الدائم باسمك.</div>
-    
-    <div class="card" style="background:var(--paper); border:1px solid var(--line); border-radius:10px; padding:12px; margin-bottom:14px;">
-      <div style="margin-bottom:8px;">
-        <div style="font-size:12px; color:var(--muted); font-weight:600;">رقم هاتف الإدارة المعتمد (واتساب):</div>
-        <div id="cashierReportTargetPhoneDisplay" style="font-size:16px; font-weight:800; color:var(--pri); font-family:monospace; margin-top:2px;" dir="ltr">010xxxxxxxx</div>
-      </div>
-      <div>
-        <div style="font-size:12px; color:var(--muted); font-weight:600;">البريد الإلكتروني المعتمد للإدارة:</div>
-        <div id="cashierReportTargetEmailDisplay" style="font-size:15px; font-weight:700; color:var(--pri); font-family:monospace; margin-top:2px;" dir="ltr">owner@example.com</div>
-      </div>
-    </div>
-
-    <div class="card" style="background:var(--card); border:1px solid var(--line); border-radius:10px; padding:14px; margin-bottom:16px;">
-      <div style="font-weight:700; margin-bottom:10px; font-size:14px; border-bottom:1px solid var(--line); padding-bottom:6px;">📈 ملخص التقرير المرفوع:</div>
-      <div style="display:flex; justify-content:space-between; margin-bottom:6px; font-size:13.5px;">
-        <span>إجمالي المبيعات:</span>
-        <strong id="cashierReportSalesPreview" style="color:var(--pri);">0.00</strong>
-      </div>
-      <div style="display:flex; justify-content:space-between; margin-bottom:6px; font-size:13.5px;">
-        <span>صافي الأرباح:</span>
-        <strong id="cashierReportProfitPreview" style="color:#16a34a;">0.00</strong>
-      </div>
-      <div style="display:flex; justify-content:space-between; font-size:13.5px;">
-        <span>عدد الفواتير المنجزة:</span>
-        <strong id="cashierReportInvoicesPreview">0</strong>
-      </div>
-    </div>
-
-    <div class="modal-actions" style="display:flex; gap:10px;">
-      <button class="btn ghost" type="button" onclick="closeCashierReportModal()">إلغاء</button>
-      <button class="btn" type="button" onclick="dispatchReportByCashier('whatsapp')" style="background:#16a34a; border-color:#16a34a; font-weight:700; color:#fff; flex:1;">
-        📲 إرسال عبر واتساب
-      </button>
-      <button class="btn" type="button" onclick="dispatchReportByCashier('email')" style="background:#0284c7; border-color:#0284c7; font-weight:700; color:#fff; flex:1;">
-        📧 إرسال عبر البريد
-      </button>
-    </div>
-  </div>
-</div>
-
-</body>`);
+  if(w) w.document.write('<title>صورة فاتورة المورد</title><body style="margin:0; background:#222; display:flex; justify-content:center;"><img src="' + t.supplierInvoiceImage + '" style="max-width:100%; height:auto;">' + '</' + 'body>');
 }
 
 // Suppliers
