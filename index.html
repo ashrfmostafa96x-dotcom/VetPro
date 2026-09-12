@@ -15119,7 +15119,6 @@ function loadScheduledReportUI(){
   const kEl = document.getElementById('dailyReportCallMeBotKey'); if(kEl) kEl.value = settings.dailyReportCallMeBotKey || '';
   document.getElementById('dailyReportTime').value = settings.dailyReportHourUTC || '05';
 }
-async 
 async function testSendWhatsAppReport(){
   const phone = (document.getElementById('dailyReportWhatsApp').value || '').trim().replace(/[^0-9]/g, '');
   const apiKey = (document.getElementById('dailyReportCallMeBotKey').value || '').trim();
@@ -15172,7 +15171,7 @@ function openWhatsAppDailyReport(){
   window.open(url, '_blank');
 }
 
-function saveScheduledReportSettings(){
+async function saveScheduledReportSettings(){
   if(!settings.cloudPharmacyId){
     showToast('لازم تربط البرنامج بحساب سحابي أولًا (كارت المزامنة السحابية أعلاه) عشان يقدر السيرفر يقرأ إعداداتك');
     return;
